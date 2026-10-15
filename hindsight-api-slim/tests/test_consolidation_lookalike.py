@@ -80,3 +80,22 @@ def test_only_a_state_change_asks_for_a_second_look(fact: str, old: str, new: st
     from hindsight_api.engine.consolidation.consolidator import _signals_change
 
     assert _signals_change(fact, old, new) is changes
+
+
+def test_a_count_observation_is_not_named_as_out_of_date_by_a_fact_without_a_number():
+    """eval `no-arithmetic`: told "The user has 2 dogs" must be updated for a new puppy, the
+    LLM wrote the puppy into the count."""
+    from hindsight_api.engine.consolidation.consolidator import _drop_count_hints
+    from hindsight_api.engine.consolidation.triage import TriageResult
+
+    from types import SimpleNamespace
+
+    count = SimpleNamespace(id="obs-count", text="The user has 2 dogs.")
+    rex = SimpleNamespace(id="obs-rex", text="The user's dog Rex is a beagle.")
+    triage = TriageResult(affected={"f-puppy": ["obs-count", "obs-rex"], "f-three": ["obs-count"]})
+    memories = [
+        {"id": "f-puppy", "text": "The user adopted a puppy named Miso."},
+        {"id": "f-three", "text": "The user now has 3 dogs."},
+    ]
+    _drop_count_hints(triage, memories, [count, rex])
+    assert triage.affected == {"f-puppy": ["obs-rex"], "f-three": ["obs-count"]}

@@ -250,11 +250,13 @@ def build_consolidation_input(
     observations_text: str,
     observations_mission: str | None = None,
     observation_capacity_note: str | None = None,
+    affected_note: str | None = None,
     related_note: str | None = None,
 ) -> str:
     """Per-batch user message: MISSION + INPUT data + any capacity constraint.
 
-    ``related_note`` names,
+    ``affected_note`` names, per new fact, the existing observations it makes out of date —
+    judged before this call — so a change reaches every one of them. ``related_note`` names,
     per new fact, the existing observations that mention the same entity by name: the ones a
     change must be checked against.
 
@@ -268,6 +270,14 @@ def build_consolidation_input(
         capacity_section = f"## CAPACITY CONSTRAINT\n\n{escape_for_prompt(observation_capacity_note)}\n\n"
     # _SPLIT_INPUT_SECTION omits the stable observation-format explanation (now in
     # the cached system prefix) — only the variable facts/observations remain.
+    affected_section = ""
+    if affected_note:
+        affected_section = (
+            "## OBSERVATIONS THE NEW FACTS MAKE OUT OF DATE\n\n"
+            "Each must be UPDATED (or, if it merely restates another, deleted with `merged_into`) so that "
+            "none still presents the old value as current:\n"
+            f"{escape_for_prompt(affected_note)}\n\n"
+        )
     related_section = ""
     if related_note:
         related_section = (
@@ -276,5 +286,5 @@ def build_consolidation_input(
             "the fact changes something it states, UPDATE it too (rule 5); leave the others as they are:\n"
             f"{escape_for_prompt(related_note)}\n\n"
         )
-    template = mission_section + capacity_section + related_section + _SPLIT_INPUT_SECTION
+    template = mission_section + capacity_section + affected_section + related_section + _SPLIT_INPUT_SECTION
     return template.format(facts_text=facts_text, observations_text=observations_text)

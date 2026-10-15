@@ -57,6 +57,7 @@ from .prompts import (
     build_consolidation_input,
     build_consolidation_system_prompt,
 )
+from .triage import TriageResult, stated_after, triage_enabled, triage_facts
 
 if TYPE_CHECKING:
     # The engine's connection abstraction, which is what every caller passes; the annotations
@@ -2498,26 +2499,51 @@ async def _process_memory_batch(
                 f"({current_count}/{max_obs}), only updates/deletes allowed"
             )
 
-    related = await _same_entity_observations(pool, bank_id, memories, union_observations)
+    # 2c. Triage: restatements and chatter are settled by a typed judgment, not the LLM.
+    triage = TriageResult()
+    if triage_enabled(config):
+        async with acquire_with_retry(pool) as conn:
+            entities_by_fact = await get_memories().entities_for_units(
+                conn=conn, fq_table=fq_table, bank_id=bank_id, unit_ids=[str(m["id"]) for m in memories]
+            )
+        triage = await triage_facts(
+            memories,
+            [list(r.results) for r in per_fact_recalls],
+            config,
+            entities_by_fact=entities_by_fact,
+            mission=(config.observations_mission or "").strip(),
+            may_create=remaining_observation_slots is None,
+        )
+    llm_memories = [m for m in memories if not triage.settled(str(m["id"]))]
+    _drop_count_hints(triage, memories, union_observations)
+    related = await _same_entity_observations(pool, bank_id, llm_memories, union_observations) if llm_memories else {}
 
-    # 3. Single LLM call
+    # 3. Single LLM call — skipped when triage settled every fact.
     t0 = time.time()
-    llm_result = await _consolidate_batch_with_llm(
-        llm_config=llm_config,
-        memories=memories,
-        union_observations=union_observations,
-        union_source_facts=union_source_facts,
-        config=config,
-        remaining_observation_slots=remaining_observation_slots,
-        max_observations_per_scope=max_obs,
-        related=related,
+    llm_result = (
+        await _consolidate_batch_with_llm(
+            llm_config=llm_config,
+            memories=llm_memories,
+            union_observations=union_observations,
+            union_source_facts=union_source_facts,
+            config=config,
+            remaining_observation_slots=remaining_observation_slots,
+            max_observations_per_scope=max_obs,
+            affected=triage.affected,
+            related=related,
+        )
+        if llm_memories
+        else _BatchLLMResult()
     )
-    if perf:
+    if perf and llm_memories:
         perf.record_timing("llm", time.time() - t0)
         perf.record_llm_call(llm_result.obs_count, llm_result.prompt_chars)
         perf.record_llm_batch_failures(llm_result.failed_attempts)
-    if not llm_result.failed:
-        await _cascade_to_untouched(llm_config, config, memories, union_observations, llm_result, related)
+    if llm_memories and not llm_result.failed:
+        await _cascade_to_untouched(
+            llm_config, config, llm_memories, union_observations, llm_result, {**related, **triage.affected}
+        )
+    _apply_triage(llm_result, triage, union_observations)
 
     # 4. Prepare every action connection-free, then apply them all in ONE transaction.
     #
@@ -2860,6 +2886,8 @@ async def _process_memory_batch(
             results.append({"action": "created"})
         elif updated:
             results.append({"action": "updated"})
+        elif mid in triage.chatter:
+            results.append({"action": "skipped", "reason": "triage_chatter"})
         else:
             results.append({"action": "skipped", "reason": "no_durable_knowledge"})
 
@@ -3112,6 +3140,40 @@ async def _apply_create_action(
     return created["action"]
 
 
+def _apply_triage(llm_result: _BatchLLMResult, triage: TriageResult, union_observations: list["MemoryFact"]) -> None:
+    """Write the triage verdicts as actions: a new fact is a CREATE of its own sentence, and a
+    restatement is evidence for its observation — an UPDATE that keeps the text as it is.
+
+    Folded into the LLM's own update of that observation when there is one, since two
+    updates of one observation in a response overwrite each other.
+    """
+    text_by_id = {str(o.id): o.text for o in union_observations}
+    id_by_text = {_norm_obs_text(o.text): str(o.id) for o in union_observations}
+    restates = dict(triage.restates)
+    for fact_id, sentence in triage.new.items():
+        # Recorded verbatim before, an exact copy would be dropped as a duplicate create and the
+        # fact left backing nothing: it is evidence for the observation that already says it.
+        if (twin := id_by_text.get(_norm_obs_text(sentence))) is not None:
+            restates[fact_id] = twin
+            continue
+        llm_result.creates.append(
+            _CreateAction(text=sentence, source_fact_ids=[fact_id], reason="triage: a new facet, recorded as stated")
+        )
+    for fact_id, observation_id in restates.items():
+        existing = next((u for u in llm_result.updates if u.observation_id == observation_id), None)
+        if existing is not None:
+            existing.source_fact_ids = [*existing.source_fact_ids, fact_id]
+        elif observation_id in text_by_id:
+            llm_result.updates.append(
+                _UpdateAction(
+                    observation_id=observation_id,
+                    text=text_by_id[observation_id],
+                    source_fact_ids=[fact_id],
+                    reason="triage: restates this observation",
+                )
+            )
+
+
 _CHANGE_WORDS = re.compile(
     r"\b(moved|switched|changed|left|removed|replaced|reverted|retired|no longer|instead|sold|died|"
     r"raised|lowered|renamed|migrated|dropped|stopped|ended|quit)\b",
@@ -3211,19 +3273,6 @@ async def _cascade_to_untouched(
 _RELATED_MAX_PER_ENTITY = 5
 
 
-def stated_after(observation_at: Any, fact_at: Any) -> bool:
-    """Whether the observation was last stated after the fact: then the fact is not news to it."""
-
-    def parse(value: Any) -> datetime | None:
-        if value is None:
-            return None
-        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-
-    obs, fact = parse(observation_at), parse(fact_at)
-    return obs is not None and fact is not None and obs > fact
-
-
 async def _same_entity_observations(
     pool: DatabaseBackend,
     bank_id: str,
@@ -3270,6 +3319,28 @@ async def _same_entity_observations(
 
 
 _COUNT = re.compile(r"\b(\d+)\s+([a-z]{3,})", re.IGNORECASE)
+
+
+def _drop_count_hints(
+    triage: TriageResult, memories: list[dict[str, Any]], union_observations: list["MemoryFact"]
+) -> None:
+    """Keep a count observation out of the "must update" hints unless the fact states a number.
+
+    Asked whether "The user has 2 dogs" is out of date once a puppy is adopted, the judgment says
+    yes, and told so the LLM wrote the puppy into the count observation (eval `no-arithmetic`):
+    the count is its own facet and a new member never restates it (rule 8). The fact still goes
+    to the LLM; it is only not pointed at the count.
+    """
+    texts = {str(o.id): o.text for o in union_observations}
+    for memory in memories:
+        fact_id = str(memory["id"])
+        if fact_id not in triage.affected or _COUNT.search(str(memory.get("text") or "")):
+            continue
+        kept = [oid for oid in triage.affected[fact_id] if not _counted_nouns(texts.get(oid, ""))]
+        if kept:
+            triage.affected[fact_id] = kept
+        else:
+            del triage.affected[fact_id]
 
 
 def _counted_nouns(text: str) -> set[str]:
@@ -3712,6 +3783,7 @@ async def _consolidate_batch_with_llm(
     config: Any,
     remaining_observation_slots: int | None = None,
     max_observations_per_scope: int = -1,
+    affected: dict[str, list[str]] | None = None,
     related: dict[str, list[str]] | None = None,
 ) -> _BatchLLMResult:
     """Single LLM call for a batch of facts against a pooled set of observations."""
@@ -3770,6 +3842,12 @@ async def _consolidate_batch_with_llm(
         observations_text=observations_text,
         observations_mission=config.observations_mission,
         observation_capacity_note=observation_capacity_note,
+        affected_note="\n".join(
+            f"- fact {fid} → observations {', '.join(ids)}"
+            for fid, ids in (affected or {}).items()
+            if any(str(m["id"]) == fid for m in memories)
+        )
+        or None,
         related_note="\n".join(f"- fact {fid} → observations {', '.join(ids)}" for fid, ids in (related or {}).items())
         or None,
     )
