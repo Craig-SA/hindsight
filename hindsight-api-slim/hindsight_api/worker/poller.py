@@ -2043,10 +2043,12 @@ class WorkerPoller:
                 for schema in schemas_to_query:
                     table = fq_table("async_operations", schema)
 
-                    # Bucket pending rows by the same predicates the claim query
-                    # filters on, so an operator can see why pending > 0 but
-                    # nothing is being claimed (orphaned batch_retain parents,
-                    # retry backoff, etc.).
+                    # Bucket pending rows by the claim-query predicates that are
+                    # cheap to count here, so an operator can see why pending > 0
+                    # but nothing is being claimed (orphaned batch_retain parents,
+                    # retry backoff, etc.). Deliberately a *subset* of the claim
+                    # predicate — the serialization exclusions are left out, see
+                    # _log_pending_breakdown.
                     # Use SUM(CASE WHEN ...) instead of COUNT(*) FILTER (WHERE ...)
                     # for Oracle compatibility — FILTER is PG-specific.
                     try:
