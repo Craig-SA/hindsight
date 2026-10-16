@@ -7840,6 +7840,8 @@ class MemoryEngine(MemoryEngineInterface):
                 f"Target bank '{target}' already exists; a bank restore writes into a fresh bank "
                 f"(it is not a merge). Delete it first, or choose a different target bank id."
             )
+        # The restore checks this again, but the caller should get the 400 now, not a failed operation.
+        bank_utils.validate_new_bank_id(target)
         if self._operation_validator:
             from hindsight_api.extensions import CreateBankContext
 
@@ -8618,14 +8620,18 @@ class MemoryEngine(MemoryEngineInterface):
                     uuid.UUID(operation_id),
                 )
 
-        if self._operation_validator and await bank_utils.get_bank_profile_if_exists(backend, bank_id) is None:
-            from hindsight_api.extensions import CreateBankContext
+        if await bank_utils.get_bank_profile_if_exists(backend, bank_id) is None:
+            # Checked here rather than only at submit time: the admin CLI restores through
+            # this method directly, and the id may come from the archive's manifest.
+            bank_utils.validate_new_bank_id(bank_id)
+            if self._operation_validator:
+                from hindsight_api.extensions import CreateBankContext
 
-            ctx = CreateBankContext(
-                bank_id=bank_id,
-                request_context=request_context,
-            )
-            await self._validate_operation(self._operation_validator.validate_create_bank(ctx))
+                ctx = CreateBankContext(
+                    bank_id=bank_id,
+                    request_context=request_context,
+                )
+                await self._validate_operation(self._operation_validator.validate_create_bank(ctx))
 
         async def _resolve_restored_config() -> HindsightConfig:
             # import_bank calls this once it has restored the archive's bank row.

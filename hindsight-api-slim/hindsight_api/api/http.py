@@ -1865,7 +1865,7 @@ class CreateBankAliasRequest(BaseModel):
     alias: str = Field(
         description=(
             "The extra bank id. Same rules as a bank id (non-empty, at most 192 bytes of UTF-8, no "
-            "control characters), and it must not already name a bank or another alias."
+            "control characters, no leading underscore), and it must not already name a bank or another alias."
         )
     )
     primary: bool = Field(
