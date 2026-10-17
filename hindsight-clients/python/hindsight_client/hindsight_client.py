@@ -746,6 +746,8 @@ class Hindsight:
         exclude_mental_model_ids: list[str] | None = None,
         reflect_search_observations_max_tokens: int | None = None,
         reflect_search_observations_include_entities: bool | None = None,
+        abstain: bool = False,
+        search_queries: list[str] | None = None,
     ) -> ReflectResponse:
         """
         Generate a contextual answer based on bank identity and memories (sync wrapper — prefer :meth:`areflect` in async code).
@@ -783,6 +785,12 @@ class Hindsight:
             reflect_search_observations_include_entities: Whether search_observations attaches
                 resolved entity names, which can be over half the tool payload. None uses the
                 bank default (enabled).
+            abstain: Allow an empty answer: when memory holds nothing that answers the query, the
+                response has empty ``text`` and ``abstained=True`` instead of reflect searching on or
+                failing (default: False).
+            search_queries: What the first retrieval round searches, each query through every layer,
+                instead of an LLM rewriting the query into one search. Applies on a server with a
+                decision model.
 
         Returns:
             ReflectResponse with answer text, optionally facts used, optionally a 'trace' with
@@ -809,6 +817,8 @@ class Hindsight:
                 exclude_mental_model_ids=exclude_mental_model_ids,
                 reflect_search_observations_max_tokens=reflect_search_observations_max_tokens,
                 reflect_search_observations_include_entities=reflect_search_observations_include_entities,
+                abstain=abstain,
+                search_queries=search_queries,
             )
         )
 
@@ -1476,6 +1486,8 @@ class Hindsight:
         exclude_mental_model_ids: list[str] | None = None,
         reflect_search_observations_max_tokens: int | None = None,
         reflect_search_observations_include_entities: bool | None = None,
+        abstain: bool = False,
+        search_queries: list[str] | None = None,
     ) -> ReflectResponse:
         """
         Generate a contextual answer based on bank identity and memories (async — preferred over :meth:`reflect`).
@@ -1513,6 +1525,12 @@ class Hindsight:
             reflect_search_observations_include_entities: Whether search_observations attaches
                 resolved entity names, which can be over half the tool payload. None uses the
                 bank default (enabled).
+            abstain: Allow an empty answer: when memory holds nothing that answers the query, the
+                response has empty ``text`` and ``abstained=True`` instead of reflect searching on or
+                failing (default: False).
+            search_queries: What the first retrieval round searches, each query through every layer,
+                instead of an LLM rewriting the query into one search. Applies on a server with a
+                decision model.
 
         Returns:
             ReflectResponse with answer text, optionally facts used, optionally a 'trace' with
@@ -1553,6 +1571,8 @@ class Hindsight:
             exclude_mental_model_ids=exclude_mental_model_ids,
             reflect_search_observations_max_tokens=reflect_search_observations_max_tokens,
             reflect_search_observations_include_entities=reflect_search_observations_include_entities,
+            abstain=abstain or None,
+            search_queries=search_queries,
         )
 
         return await _retry_on_capacity(
