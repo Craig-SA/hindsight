@@ -633,6 +633,9 @@ async def test_dedup_create_fold_uses_only_live_new_sources() -> None:
     assert conn.fetchval.await_args.args[2] == [live_source_id]
 
 
+# Seeds source liveness through a mocked `conn`, which a store-owned bank never reads: the
+# preflight asks the store, finds nothing, and short-circuits before the behaviour under test.
+@pytest.mark.memory_backend_incompatible
 async def test_dedup_create_all_new_sources_deleted_returns_none() -> None:
     kwargs, conn, llm = _ctx()
     kwargs["create_source_ids"] = [uuid.uuid4(), uuid.uuid4()]
@@ -687,6 +690,9 @@ async def test_dedup_update_fold_uses_only_live_updated_sources() -> None:
     conn.execute.assert_awaited()  # fold succeeded → updated row deleted
 
 
+# Seeds source liveness through a mocked `conn`, which a store-owned bank never reads: the
+# preflight asks the store, finds nothing, and short-circuits before the behaviour under test.
+@pytest.mark.memory_backend_incompatible
 async def test_dedup_update_all_updated_sources_deleted_skips_fold_and_delete() -> None:
     kwargs, conn, llm = _update_ctx()
     conn.fetchrow_result = {"source_memory_ids": [uuid.uuid4(), uuid.uuid4()]}
@@ -752,6 +758,9 @@ async def _run_create_batch(create_action_result: str):
     return result, create_action, mem_id
 
 
+# Seeds source liveness through a mocked `conn`, which a store-owned bank never reads: the
+# preflight asks the store, finds nothing, and short-circuits before the behaviour under test.
+@pytest.mark.memory_backend_incompatible
 async def test_process_batch_creates_when_dedup_target_vanished() -> None:
     # Caller contract: when the adjudicator finds no twin to fold into, _process_memory_batch
     # must still CREATE the observation instead of dropping it.
@@ -763,6 +772,9 @@ async def test_process_batch_creates_when_dedup_target_vanished() -> None:
     assert result == ([{"action": "created"}], 0, False)
 
 
+# Seeds source liveness through a mocked `conn`, which a store-owned bank never reads: the
+# preflight asks the store, finds nothing, and short-circuits before the behaviour under test.
+@pytest.mark.memory_backend_incompatible
 async def test_process_batch_reports_skipped_when_create_skipped() -> None:
     # _apply_create_action returns "skipped" (all sources deleted in the write txn) ->
     # _process_memory_batch must NOT mark the memory created; it falls through to skipped.
@@ -770,12 +782,18 @@ async def test_process_batch_reports_skipped_when_create_skipped() -> None:
     assert result == ([{"action": "skipped", "reason": "no_durable_knowledge"}], 0, False)
 
 
+# Seeds source liveness through a mocked `conn`, which a store-owned bank never reads: the
+# preflight asks the store, finds nothing, and short-circuits before the behaviour under test.
+@pytest.mark.memory_backend_incompatible
 async def test_process_batch_reports_created_when_create_created() -> None:
     # _apply_create_action returns "created" -> the memory is marked created.
     result, _create_action, _mem_id = await _run_create_batch("created")
     assert result == ([{"action": "created"}], 0, False)
 
 
+# Seeds source liveness through a mocked `conn`, which a store-owned bank never reads: the
+# preflight asks the store, finds nothing, and short-circuits before the behaviour under test.
+@pytest.mark.memory_backend_incompatible
 async def test_process_batch_embeds_all_actions_in_one_call() -> None:
     # #5552: a response's actions are embedded in ONE embedder call, not one call per action.
     # A create that copies an update's text is dropped before the call, so it is not embedded.
