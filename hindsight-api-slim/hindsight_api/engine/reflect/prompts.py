@@ -1216,6 +1216,11 @@ RULES
   batch, not the whole memory — the document was built from facts you cannot see.
   "The batch does not mention X" and "X did not happen" are different statements,
   and only the second would justify an edit.
+- **A fact about one thing never refutes a claim about another**: facts about
+  OTHER people, items, versions or events — even the ones just before and after
+  it in a sequence or on the calendar — say nothing about the one the document
+  names. Keep that claim exactly as written; never cast doubt on it ("may be
+  misrecorded", "however, records show…"). Add the new facts beside it.
 - **Refutation threshold for removal or overwrite**: you may only remove or
   overwrite existing text when a SUPPORTING FACT explicitly refutes or corrects
   that exact detail, OR is a later-DATED statement about the same facet (a
