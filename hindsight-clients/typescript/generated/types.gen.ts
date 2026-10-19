@@ -3302,6 +3302,12 @@ export type LlmCallTrace = {
    * Execution time in milliseconds
    */
   duration_ms: number;
+  /**
+   * Detail
+   *
+   * What the call decided, when it is a decision
+   */
+  detail?: string | null;
 };
 
 /**
