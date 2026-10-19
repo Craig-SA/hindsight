@@ -21,7 +21,7 @@ The interesting question is not whether the writes landed. It is what the bank n
 
 - **Nothing in Hindsight ever merges two raw facts.** Twenty agents reaching the same conclusion write twenty rows, permanently. That is the audit trail working as designed, not a dedup failure.
 - **Consolidation is what turns redundancy into evidence.** An observation's `proof_count` is a count of *distinct live source memory ids*, so twenty agents agreeing becomes one observation citing twenty facts — independent corroboration is the one thing a swarm can give memory that a single agent structurally cannot.
-- **Concurrency bites hardest on entity names, not facts.** The in-batch variant merge only works inside a single retain, and a swarm's writes are separate retains, so it never runs. Convergence falls to matching against entities already committed.
+- **Concurrency bites hardest on entity names, not facts.** Variant merging is in-batch, and a swarm's writes are separate retains, so convergence falls to matching against entities already committed.
 - **One bad agent is every agent's context.** In a solo agent a poisoned write is one bad memory. In a swarm it is the shared premise the next nineteen workers recall.
 - **A worker without a stable `document_id` does not retry, it duplicates.**
 
@@ -57,23 +57,11 @@ There is a nice piece of concurrency hygiene in here too. The create path filter
 
 ## Where concurrency actually bites: entity names
 
-This is the part I had backwards before reading the resolver, and it is the one genuinely swarm-specific failure mode.
+Hindsight merges surface variants of new entity names — "Acme Corp" and "Acme Corp." become one entity — but that pass is **in-batch**: it only reconciles names created by the *same* retain. Twenty workers each writing their own retain never go through it, however similar their names are.
 
-Hindsight merges surface variants of new entity names — "Acme Corp" and "Acme Corp." become one entity. It is governed by `ENTITY_INTRABATCH_MERGE_SIMILARITY`, 0.5 by default, and the pass is capped at 250 unique new names per batch, above which it is skipped with a log warning because the comparison is quadratic.
+What governs convergence instead is resolution against entities already stored, floored by `ENTITY_MERGE_MIN_SIMILARITY` at 0.3. Worker two's "Acme Corporation" resolves onto worker one's "Acme Corp" — if worker one's write has already committed. Identical names racing each other are handled properly, with an `ON CONFLICT DO NOTHING` insert and a fallback read for whoever lost; variants written in the same instant have nothing committed to match yet, and you get two entities for one company.
 
-The cap is not your problem. A swarm's writes are many *small* retains, each far below 250. The problem is the word **in-batch**: that pass only merges variants created by the *same* retain. Twenty workers each writing their own retain never go through it at all, no matter how similar their names are.
-
-What governs convergence instead is resolution against entities already stored, floored by `ENTITY_MERGE_MIN_SIMILARITY` at 0.3. Worker two's "Acme Corporation" resolves onto worker one's "Acme Corp" — *if worker one's write has already committed*.
-
-Exact collisions are handled properly. New entities are inserted with `ON CONFLICT DO NOTHING` to avoid row locks under concurrent races, with a fallback SELECT for names that conflicted because, as the code puts it, another worker won the race. Two agents writing the identical name at the identical moment get one entity.
-
-Variants are the gap. Two agents writing "Acme Corp" and "Acme Corporation" in the same instant both look for an existing match, both find nothing, and both mint. Neither in-batch merging nor resolve-against-existing can help: the first has no batch to work in, the second has nothing committed to match. You get two entities for one company, and the entity arm of recall now splits its evidence between them.
-
-Three ways to live with it, in order of how much they cost you:
-
-- **Seed the vocabulary.** Have the planner retain the entities the task is about before fanning out. The workers then resolve against committed names instead of racing each other to invent them. This is cheap and it is the one I would reach for first.
-- **Give the planner the write.** Workers report; one process retains. You lose concurrent write throughput and gain a single batch, which puts in-batch variant merging back in play.
-- **Accept it and clean up.** Variants are visible after the fact and mergeable. Just know that finding them is work you do yourself.
+The cheap fix is to seed the vocabulary: have the planner retain the entities the task is about before fanning out, so workers resolve against committed names instead of inventing them in parallel.
 
 ## One bad agent is everyone's context
 
@@ -111,7 +99,7 @@ Consolidation scopes an observation by the tag set of the memories under it, so 
 ## What I would actually do
 
 1. **One bank, one tag set** for a swarm working a shared problem. Corroboration is the point; do not scope it away by accident.
-2. **Seed the entities** from the planner before fanning out, so workers resolve against committed names rather than racing to mint variants.
+2. **Seed the entities** from the planner before fanning out.
 3. **Stable `document_id` per unit of work**, derived from worker and task, so a retry is a retry.
 4. **Turn Memory Defense on**, with `prompt_injection` set to `quarantine` and the planner's brief in an immutable namespace.
 5. **Read observations, not facts.** The raw layer holds twenty copies by design. The reconciled layer is the one built for this.
