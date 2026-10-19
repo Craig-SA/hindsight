@@ -61,7 +61,7 @@ Hindsight merges surface variants of new entity names — "Acme Corp" and "Acme 
 
 What governs convergence instead is resolution against entities already stored, floored by `ENTITY_MERGE_MIN_SIMILARITY` at 0.3. Worker two's "Acme Corporation" resolves onto worker one's "Acme Corp" — if worker one's write has already committed. Identical names racing each other are handled properly, with an `ON CONFLICT DO NOTHING` insert and a fallback read for whoever lost; variants written in the same instant have nothing committed to match yet, and you get two entities for one company.
 
-The cheap fix is to seed the vocabulary: have the planner retain the entities the task is about before fanning out, so workers resolve against committed names instead of inventing them in parallel.
+Worth knowing rather than working around. Only the writes racing a name's *first* appearance can split it — once one worker's "Acme Corp" is committed, every later worker resolves onto it — so a swarm's vocabulary converges as it runs, and what is left is visible and mergeable afterwards. Pre-declaring the entities would avoid it, but a swarm you can hand a complete vocabulary to in advance is not really discovering anything.
 
 ## One bad agent is everyone's context
 
@@ -99,12 +99,11 @@ Consolidation scopes an observation by the tag set of the memories under it, so 
 ## What I would actually do
 
 1. **One bank, one tag set** for a swarm working a shared problem. Corroboration is the point; do not scope it away by accident.
-2. **Seed the entities** from the planner before fanning out.
-3. **Stable `document_id` per unit of work**, derived from worker and task, so a retry is a retry.
-4. **Turn Memory Defense on**, with `prompt_injection` set to `quarantine` and the planner's brief in an immutable namespace.
-5. **Read observations, not facts.** The raw layer holds twenty copies by design. The reconciled layer is the one built for this.
-6. **Treat `proof_count` as a signal, not a score.** It counts distinct live sources, which is exactly corroboration — provided your agents genuinely did not share context, and provided retries are not inflating it.
-7. **Stay on Postgres** if near-duplicate observation reconciliation matters to you, because Oracle skips it.
+2. **Stable `document_id` per unit of work**, derived from worker and task, so a retry is a retry.
+3. **Turn Memory Defense on**, with `prompt_injection` set to `quarantine` and the planner's brief in an immutable namespace.
+4. **Read observations, not facts.** The raw layer holds twenty copies by design. The reconciled layer is the one built for this.
+5. **Treat `proof_count` as a signal, not a score.** It counts distinct live sources, which is exactly corroboration — provided your agents genuinely did not share context, and provided retries are not inflating it.
+6. **Stay on Postgres** if near-duplicate observation reconciliation matters to you, because Oracle skips it.
 
 A swarm is not one agent with more hands. It is the only setup where memory can tell the difference between a thing one agent believes and a thing that several independently found — and the whole value of that sits in one layer, with a handful of settings deciding whether you get it.
 
