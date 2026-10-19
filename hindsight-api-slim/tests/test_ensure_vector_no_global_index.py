@@ -145,6 +145,7 @@ def test_reconcile_leaves_stale_global_index_untouched(vec_db_url):
 
 
 @pytest.mark.xdist_group("vecidx_pg0")
+@pytest.mark.memory_backend_incompatible
 def test_migration_drops_stale_global_index(vec_db_url):
     """Upgrading from the pre-repair revision removes a leftover global index."""
     _skip_unless_per_bank_backend()
