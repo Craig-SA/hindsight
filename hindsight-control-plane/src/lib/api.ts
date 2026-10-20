@@ -58,12 +58,8 @@ export type RetainContentBlock =
 export interface SessionSummary {
   session_id: string;
   document_id: string;
-  title: string | null;
-  /** Who streams it, e.g. "claude-code" — resolved to a logo by lib/harness-logo.ts. */
-  source: string | null;
-  status: "open" | "closed";
   watch: boolean;
-  retain: "turns" | "close" | "off";
+  retain: "turns" | "idle" | "off";
   event_count: number;
   check_count: number;
   note_count: number;
@@ -101,7 +97,6 @@ interface SessionListResponse {
 interface SessionEventsResponse {
   items: SessionEvent[];
   last_seq: number;
-  status: "open" | "closed";
   checking: boolean;
 }
 
@@ -1238,7 +1233,7 @@ export class ControlPlaneClient {
     );
   }
 
-  /** A bank's sessions, most recently active first; `q` matches id or title. */
+  /** A bank's sessions, most recently active first; `q` matches the id. */
   async listSessions(
     bankId: string,
     options: { q?: string; limit?: number; offset?: number } = {}
@@ -1273,13 +1268,6 @@ export class ControlPlaneClient {
       ),
       undefined,
       { suppressErrorToast: true }
-    );
-  }
-
-  async closeSession(bankId: string, sessionId: string) {
-    return this.fetchApi<SessionSummary>(
-      bankApi(bankId, `/sessions/${encodeURIComponent(sessionId)}/close`),
-      { method: "POST" }
     );
   }
 

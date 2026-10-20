@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { SessionEvent } from "@/lib/api";
 import {
   buildTimeline,
+  checkSpans,
+  formatClock,
   decisionPath,
   filterRows,
   isActive,
@@ -9,6 +11,7 @@ import {
   nextPollDelay,
   noteLatencyMs,
   parseDecisionDetail,
+  replayEvents,
   replayOffsets,
   toolTarget,
 } from "@/lib/session-timeline";
@@ -182,22 +185,53 @@ describe("decision path", () => {
   });
 });
 
+describe("tool families", () => {
+  it("knows a tool by the words of its name, whichever agent named it", () => {
+    const familyOf = (tool: string) =>
+      buildTimeline([
+        {
+          seq: 1,
+          event_id: "c",
+          source: "client",
+          kind: "tool_call",
+          ts: null,
+          created_at: "2026-10-19T19:00:00Z",
+          payload: { role: "assistant", tool, call_id: "c", input: {} },
+        },
+      ]).rows[0];
+    const cases: [string, string][] = [
+      ["Edit", "edit"],
+      ["apply_patch", "edit"],
+      ["write_file", "edit"],
+      ["patch", "edit"],
+      ["Bash", "command"],
+      ["terminal", "command"],
+      ["exec_command", "command"],
+      ["Read", "read"],
+      ["read_file", "read"],
+      ["search_files", "read"],
+      ["TodoWrite", "read"],
+      ["dispatch_task", "other"],
+    ];
+    for (const [tool, family] of cases) expect(familyOf(tool)).toMatchObject({ family });
+  });
+});
+
 describe("live rules", () => {
-  it("is active only when open and recently written", () => {
+  it("is live only when recently written, otherwise idle", () => {
     const now = Date.parse("2026-10-19T19:10:00Z");
-    expect(isActive({ status: "open", last_event_at: "2026-10-19T19:09:00Z" }, now)).toBe(true);
-    expect(isActive({ status: "open", last_event_at: "2026-10-19T19:00:00Z" }, now)).toBe(false);
-    expect(isActive({ status: "closed", last_event_at: "2026-10-19T19:09:59Z" }, now)).toBe(false);
+    expect(isActive({ last_event_at: "2026-10-19T19:09:00Z" }, now)).toBe(true);
+    expect(isActive({ last_event_at: "2026-10-19T19:00:00Z" }, now)).toBe(false);
+    expect(isActive({ last_event_at: null }, now)).toBe(false);
   });
 
-  it("polls fast while busy, backs off when idle or hidden, stops when closed and done", () => {
-    const p = { visible: true, status: "open" as const, checking: false, gotNew: false, idleMs: 0 };
+  it("polls fast while busy, backs off when idle or hidden", () => {
+    const p = { visible: true, checking: false, gotNew: false, idleMs: 0 };
     expect(nextPollDelay(p)).toBe(1000);
     expect(nextPollDelay({ ...p, idleMs: 5 * 60_000 })).toBe(3000);
     expect(nextPollDelay({ ...p, idleMs: 60 * 60_000 })).toBe(10_000);
+    expect(nextPollDelay({ ...p, idleMs: 60 * 60_000, checking: true })).toBe(1000);
     expect(nextPollDelay({ ...p, visible: false })).toBe(15_000);
-    expect(nextPollDelay({ ...p, status: "closed" })).toBeNull();
-    expect(nextPollDelay({ ...p, status: "closed", checking: true })).toBe(1000);
   });
 
   it("replays at real pace with dead gaps capped", () => {
@@ -216,5 +250,87 @@ describe("toolTarget", () => {
     expect(toolTarget({ pattern: "crc32" })).toBe("crc32");
     expect(toolTarget({ command: ["git", "status"] })).toBe("git status");
     expect(toolTarget(undefined)).toBe("");
+  });
+});
+
+describe("replay shows checks while they run", () => {
+  // The task check ends 6s after the prompt and took 5s: it started 1s after it.
+  function log() {
+    clock = Date.parse("2026-10-19T19:00:00Z");
+    return [
+      ev(1, "client", "message", { role: "user", text: "Fix bucket" }),
+      ev(2, "client", "tool_call", { tool: "Read", call_id: "a", input: {} }, 3000),
+      ev(
+        3,
+        "hindsight",
+        "check",
+        { trigger: "task", moment_seq: 1, outcome: "note", ms: 5000, answer: "x" },
+        3000
+      ),
+      ev(4, "hindsight", "note", { text: "x", check_seq: 3 }, 0),
+    ];
+  }
+
+  it("places a check from its start to when it was logged, never before its moment", () => {
+    const events = log();
+    const offsets = replayOffsets(events);
+    expect(checkSpans(events, offsets)).toEqual([
+      { seq: 3, start: 1000, end: 6000, outcome: "note", trigger: "task" },
+    ]);
+    events[2].payload.ms = 60_000; // longer than the replay clock gives it
+    expect(checkSpans(events, offsets)[0].start).toBe(0);
+  });
+
+  it("shows the running check on its moment without its outcome, then the real one", () => {
+    const events = log();
+    const offsets = replayOffsets(events);
+    const spans = checkSpans(events, offsets);
+    const mid = buildTimeline(replayEvents(events, offsets, spans, 4000));
+    const running = mid.rows[0].checks[0].check;
+    expect(running.running_ms).toBe(3000);
+    expect(running.outcome).toBeUndefined();
+    expect(running.answer).toBeUndefined();
+    expect(mid.rows.some((r) => r.kind === "note")).toBe(false);
+    // The source log is untouched.
+    expect(events[2].payload.outcome).toBe("note");
+
+    const done = buildTimeline(replayEvents(events, offsets, spans, 6000));
+    expect(done.rows[0].checks[0].check.outcome).toBe("note");
+    expect(done.rows[0].checks[0].check.running_ms).toBeUndefined();
+    expect(done.rows.some((r) => r.kind === "note")).toBe(true);
+  });
+});
+
+describe("handoffs", () => {
+  it("draws the server's handoff entry where it was logged, with the row it went back with", () => {
+    const events = [
+      ...session(),
+      ev(10, "client", "message", { role: "assistant", text: "Looking." }),
+      ev(11, "hindsight", "handoff", { note_seq: 5, with_seqs: [10] }),
+    ];
+    const rows = buildTimeline(events).rows;
+    const h = rows[rows.length - 1];
+    expect(h.kind).toBe("handoff");
+    if (h.kind !== "handoff") return;
+    expect(h.note.seq).toBe(5);
+    expect(h.host?.kind === "message" && h.host.text).toBe("Looking.");
+  });
+
+  it("has no host when a poll fetched the note", () => {
+    const rows = buildTimeline([
+      ...session(),
+      ev(10, "hindsight", "handoff", { note_seq: 5, with_seqs: [] }),
+    ]).rows;
+    const h = rows[rows.length - 1];
+    expect(h.kind === "handoff" && h.host).toBeNull();
+  });
+});
+
+describe("formatClock", () => {
+  it("reads the same on both sides: minutes and seconds since the start", () => {
+    expect(formatClock(0)).toBe("0:00");
+    expect(formatClock(41_900)).toBe("0:41");
+    expect(formatClock(725_000)).toBe("12:05");
+    expect(formatClock(3_729_000)).toBe("1:02:09");
   });
 });

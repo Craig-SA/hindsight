@@ -32,6 +32,8 @@ export interface CheckPayload {
   memory_ids?: string[];
   usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
   llm_calls?: LlmCall[];
+  /** Replay only: the check has been running this long and has not answered yet (see replayEvents). */
+  running_ms?: number;
 }
 
 interface NoteSource {
@@ -117,40 +119,63 @@ export type TimelineRow =
       save: SavePayload;
       checks: CheckRow[];
     }
+  /** A note reaching the agent: the server's `handoff` entry, logged when it first went back. */
+  | {
+      kind: "handoff";
+      key: string;
+      seq: number;
+      event: SessionEvent;
+      note: Extract<TimelineRow, { kind: "note" }>;
+      /** The client row whose append's reply carried it; null when a poll fetched it. */
+      host: TimelineRow | null;
+      checks: CheckRow[];
+    }
   /** A check whose moment is not in the log: rendered on its own, where it happened. */
   | (CheckRow & { checks: CheckRow[] })
   | { kind: "other"; key: string; seq: number; event: SessionEvent; checks: CheckRow[] };
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
-const EDIT_TOOLS = new Set([
-  "edit",
-  "write",
-  "multiedit",
-  "notebookedit",
-  "apply_patch",
-  "str_replace",
+// A tool is known by the words of its name, not by one agent's names: Claude Code's
+// Edit/Bash/Read, Codex's apply_patch/shell and Hermes's write_file/terminal/read_file all
+// read the same. The server's watcher uses the same rule (engine/sessions/watch.py).
+const EDIT_WORDS = ["edit", "write", "patch", "replace", "insert", "multiedit", "notebookedit"];
+const COMMAND_WORDS = new Set([
+  "bash",
+  "shell",
+  "sh",
+  "terminal",
+  "exec",
+  "execute",
+  "run",
+  "command",
+  "cmd",
 ]);
-const COMMAND_TOOLS = new Set(["bash", "shell", "exec_command", "local_shell", "run_terminal_cmd"]);
-const READ_TOOLS = new Set([
+const READ_WORDS = new Set([
   "read",
   "grep",
   "glob",
   "ls",
-  "websearch",
-  "webfetch",
-  "todowrite",
   "view",
   "search",
-  "read_file",
-  "list_dir",
+  "find",
+  "list",
+  "fetch",
+  "get",
+  "websearch",
+  "webfetch",
 ]);
 
 function toolFamily(tool: string): ToolFamily {
-  const t = tool.toLowerCase();
-  if (EDIT_TOOLS.has(t)) return "edit";
-  if (COMMAND_TOOLS.has(t)) return "command";
-  if (READ_TOOLS.has(t)) return "read";
+  const words: string[] =
+    tool
+      .replace(/([a-z])([A-Z])/g, "$1_$2")
+      .toLowerCase()
+      .match(/[a-z]+/g) ?? [];
+  if (words.includes("todo")) return "read"; // the agent's to-do list: bookkeeping, not code
+  if (words.some((w) => EDIT_WORDS.some((e) => w.startsWith(e)))) return "edit";
+  if (words.some((w) => COMMAND_WORDS.has(w))) return "command";
+  if (words.some((w) => READ_WORDS.has(w))) return "read";
   return "other";
 }
 
@@ -232,6 +257,22 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
         }
       } else if (ev.kind === "note") {
         push({ kind: "note", key, seq: ev.seq, event: ev, note: p as NotePayload, checks: [] });
+      } else if (ev.kind === "handoff") {
+        const noteRow = rowByKey.get(rowKeyBySeq.get(Number(p.note_seq)) ?? "");
+        if (noteRow?.kind === "note") {
+          const withSeqs = Array.isArray(p.with_seqs) ? (p.with_seqs as number[]) : [];
+          const last = withSeqs.length ? withSeqs[withSeqs.length - 1] : undefined;
+          const host = last !== undefined ? rowByKey.get(rowKeyBySeq.get(last) ?? "") : undefined;
+          push({
+            kind: "handoff",
+            key,
+            seq: ev.seq,
+            event: ev,
+            note: noteRow,
+            host: host ?? null,
+            checks: [],
+          });
+        }
       } else if (ev.kind === "save") {
         push({ kind: "save", key, seq: ev.seq, event: ev, save: p as SavePayload, checks: [] });
       } else {
@@ -369,30 +410,30 @@ export function decisionPath(calls: LlmCall[] | undefined): DecisionPath {
   };
 }
 
-/** Open and logged something in the last two minutes: shown with a pulsing LIVE marker. */
+/**
+ * Logged something in the last two minutes: shown with a pulsing LIVE marker, otherwise
+ * idle. There is no "closed": a session that stopped is idle, and the server saves its
+ * last turns once it has been idle a while (HINDSIGHT_API_SESSION_IDLE_MS).
+ */
 const ACTIVE_WINDOW_MS = 2 * 60 * 1000;
 
-export function isActive(session: Pick<SessionSummary, "status" | "last_event_at">, now: number) {
-  if (session.status !== "open" || !session.last_event_at) return false;
+export function isActive(session: Pick<SessionSummary, "last_event_at">, now: number) {
+  if (!session.last_event_at) return false;
   return now - Date.parse(session.last_event_at) < ACTIVE_WINDOW_MS;
 }
 
 /**
- * How long to wait before the next `events?after=` poll, or null to stop.
+ * How long to wait before the next `events?after=` poll.
  *
  * Fast (1s) while something is happening, slower once the session has gone quiet,
- * slow while the tab is hidden. A closed session with no check in flight stops
- * after a poll that brought nothing new: the watcher can still finish a check, or
- * a save, right after close, so stopping on the first closed answer would miss it.
+ * slow while the tab is hidden. It never stops: any session can pick up again.
  */
 export function nextPollDelay(opts: {
   visible: boolean;
-  status: "open" | "closed";
   checking: boolean;
   gotNew: boolean;
   idleMs: number;
-}): number | null {
-  if (opts.status === "closed" && !opts.checking && !opts.gotNew) return null;
+}): number {
   if (!opts.visible) return 15_000;
   if (opts.checking || opts.gotNew || opts.idleMs < 60_000) return 1_000;
   if (opts.idleMs < 10 * 60_000) return 3_000;
@@ -423,6 +464,8 @@ function rowText(row: TimelineRow): string {
       return [row.note.text, row.note.source?.quote].join("\n");
     case "check":
       return checkText(row.check);
+    case "handoff":
+      return row.note.note.text ?? "";
     default:
       return "";
   }
@@ -442,7 +485,8 @@ export function filterRows(rows: TimelineRow[], f: RowFilters): TimelineRow[] {
   for (const row of rows) {
     const checks = f.silent ? row.checks : row.checks.filter((c) => !isQuietCheck(c.check));
     if (row.kind === "check" && !f.silent && isQuietCheck(row.check)) continue;
-    const hindsight = row.kind === "note" || row.kind === "save" || row.kind === "check";
+    const hindsight =
+      row.kind === "note" || row.kind === "save" || row.kind === "check" || row.kind === "handoff";
     const own = f.hindsightOnly
       ? hindsight
       : f.tools || (row.kind !== "tool" && row.kind !== "state");
@@ -477,6 +521,68 @@ export function replayOffsets(events: SessionEvent[], maxGapMs = 10_000): number
     out.push(t);
   }
   return out;
+}
+
+/** When a check started and ended on the replay clock: it is logged when it ends, `ms` after it started. */
+export interface CheckSpan {
+  seq: number;
+  start: number;
+  end: number;
+  outcome?: string;
+  trigger?: string;
+}
+
+export function checkSpans(events: SessionEvent[], offsets: number[]): CheckSpan[] {
+  const offsetBySeq = new Map(events.map((e, i) => [e.seq, offsets[i]]));
+  const spans: CheckSpan[] = [];
+  events.forEach((ev, i) => {
+    if (ev.source !== "hindsight" || ev.kind !== "check") return;
+    const c = ev.payload as CheckPayload;
+    const end = offsets[i];
+    // Never before its moment: idle gaps are squeezed on the replay clock, a check's run time is not.
+    const momentAt = typeof c.moment_seq === "number" ? offsetBySeq.get(c.moment_seq) : undefined;
+    const start = Math.min(end, Math.max(momentAt ?? 0, end - (c.ms ?? 0)));
+    spans.push({ seq: ev.seq, start, end, outcome: c.outcome, trigger: c.trigger });
+  });
+  return spans;
+}
+
+/**
+ * The log as it stood at `elapsed` on the replay clock, plus every check that was
+ * running then, as a copy without its outcome and with `running_ms` set: the
+ * replay shows Hindsight working while the agent works, not only its answers.
+ */
+export function replayEvents(
+  events: SessionEvent[],
+  offsets: number[],
+  spans: CheckSpan[],
+  elapsed: number
+): SessionEvent[] {
+  let n = 0;
+  while (n < offsets.length && offsets[n] <= elapsed) n++;
+  const shown = events.slice(0, n);
+  const bySeq = new Map(events.map((e) => [e.seq, e]));
+  for (const s of spans) {
+    if (s.start > elapsed || s.end <= elapsed) continue;
+    const ev = bySeq.get(s.seq)!;
+    // Not answered yet: no outcome, no answer.
+    const payload: CheckPayload = {
+      ...(ev.payload as CheckPayload),
+      running_ms: elapsed - s.start,
+    };
+    delete payload.outcome;
+    delete payload.answer;
+    shown.push({ ...ev, payload: payload as Record<string, unknown> });
+  }
+  return shown;
+}
+
+/** Time since the session started, the same on both sides of the view: "0:41", "12:05", "1:02:09". */
+export function formatClock(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const mm = String(Math.floor((s % 3600) / 60));
+  const ss = String(s % 60).padStart(2, "0");
+  return s >= 3600 ? `${Math.floor(s / 3600)}:${mm.padStart(2, "0")}:${ss}` : `${mm}:${ss}`;
 }
 
 /** "1.2s", "850ms", "2m 05s". */

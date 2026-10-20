@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
 import { Spinner } from "@/components/ui/spinner";
 import { HarnessLogo } from "@/components/ui/harness-logo";
+import { resolveHarnessLogo } from "@/lib/harness-logo";
+import { documentHarness } from "@/lib/harness-logo";
 import {
   Table,
   TableBody,
@@ -27,13 +29,21 @@ const PAGE_SIZE = 50;
 const LIST_REFRESH_MS = 5000;
 const SEARCH_DEBOUNCE_MS = 250;
 
+/**
+ * The client streaming a session, read like a document's: the `harness` metadata the
+ * coding-agents plugin stamps (and the session's own `source` as a fallback).
+ */
+export function sessionHarness(session: Pick<SessionSummary, "metadata">) {
+  return documentHarness(session.metadata, null);
+}
+
 /** The state dot every session row and header shares: pulsing when live, a spinner while checking. */
 export function SessionStatusDot({
   session,
   now,
   className,
 }: {
-  session: Pick<SessionSummary, "status" | "last_event_at" | "checking">;
+  session: Pick<SessionSummary, "last_event_at" | "checking">;
   now: number;
   className?: string;
 }) {
@@ -46,11 +56,10 @@ export function SessionStatusDot({
     );
   }
   const live = isActive(session, now);
-  const open = session.status === "open";
   return (
     <span
       className={cn("relative inline-flex h-2.5 w-2.5", className)}
-      title={live ? t("statusLive") : open ? t("statusIdle") : t("statusClosed")}
+      title={live ? t("statusLive") : t("statusIdle")}
     >
       {live && (
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
@@ -58,7 +67,7 @@ export function SessionStatusDot({
       <span
         className={cn(
           "relative inline-flex h-2.5 w-2.5 rounded-full",
-          live ? "bg-emerald-500" : open ? "bg-emerald-500/40" : "bg-muted-foreground/30"
+          live ? "bg-emerald-500" : "bg-muted-foreground/30"
         )}
       />
     </span>
@@ -212,7 +221,7 @@ function SessionsList({ onOpenSession }: { onOpenSession: (id: string) => void }
                   <TableCell>
                     <div className="flex min-w-0 items-center gap-2.5">
                       <SessionStatusDot session={s} now={now} className="shrink-0" />
-                      <HarnessLogo harness={s.source} size={16} />
+                      <HarnessLogo harness={sessionHarness(s)} size={16} />
                       <div className="min-w-0">
                         <button
                           type="button"
@@ -222,10 +231,10 @@ function SessionsList({ onOpenSession }: { onOpenSession: (id: string) => void }
                             onOpenSession(s.session_id);
                           }}
                         >
-                          {s.title || s.session_id}
+                          {s.session_id}
                         </button>
-                        <div className="truncate font-mono text-[11px] text-muted-foreground">
-                          {s.title ? s.session_id : s.source || ""}
+                        <div className="truncate text-[11px] text-muted-foreground">
+                          {resolveHarnessLogo(sessionHarness(s))?.label ?? ""}
                         </div>
                       </div>
                     </div>

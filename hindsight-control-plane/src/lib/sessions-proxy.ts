@@ -12,13 +12,12 @@ export async function proxySessionRequest(
   bankId: string,
   suffix: string,
   method: "GET" | "POST",
-  errorKey: "list" | "get" | "events" | "close"
+  errorKey: "list" | "get" | "events"
 ): Promise<NextResponse> {
   const fallback = {
     list: "Failed to list sessions",
     get: "Failed to get session",
     events: "Failed to get session events",
-    close: "Failed to close session",
   }[errorKey];
   try {
     const query = new URL(request.url).searchParams.toString();
