@@ -19,18 +19,22 @@ const sessionId = `chat-${Math.random().toString(16).slice(2, 10)}`;
 // =============================================================================
 
 // [docs:sessions-append]
-// Send what happened since the last append. Each event has your own id: sending the
-// same event again (a retry after a lost response) stores nothing twice. The first
-// append creates the session.
+// Send the messages since the last append, in the OpenAI chat format your agent likely
+// keeps already, each with your own id: sending one again (a retry after a lost response)
+// stores nothing twice. The first append creates the session.
 const { data: appended } = await sdk.appendSessionEvents({
     client: apiClient,
     path: { bank_id: 'my-bank', session_id: sessionId },
     body: {
-        session: { title: 'Fix the rounding bug', watch: true, retain: 'turns' },
-        events: [
-            { id: '1', role: 'user', kind: 'message', text: 'Half cents round the wrong way.' },
-            { id: '2', role: 'assistant', kind: 'tool_call', tool: 'Edit', call_id: 't1', input: { file_path: 'pay/rounding.py' } },
-            { id: '3', role: 'tool', kind: 'tool_result', call_id: 't1', text: 'updated' },
+        session: { watch: true, retain: 'turns' },
+        messages: [
+            { id: '1', role: 'user', content: 'Half cents round the wrong way.' },
+            {
+                id: '2',
+                role: 'assistant',
+                tool_calls: [{ id: 't1', type: 'function', function: { name: 'edit_file', arguments: '{"path": "pay/rounding.py"}' } }],
+            },
+            { id: '3', role: 'tool', tool_call_id: 't1', content: 'updated' },
         ],
     },
 });
@@ -44,10 +48,10 @@ let delivered = 0;
 const { data: polled } = await sdk.appendSessionEvents({
     client: apiClient,
     path: { bank_id: 'my-bank', session_id: sessionId },
-    body: { events: [], ack: delivered },
+    body: { ack: delivered },
 });
 for (const note of polled.notes) {
-    console.log(`[${note.trigger}] ${note.text} (source: ${note.source?.document_id ?? 'memory'})`);
+    console.log(`#${note.seq} ${note.text} (source: ${note.source?.document_id ?? 'memory'})`);
     delivered = note.seq;
 }
 // [/docs:sessions-notes]
@@ -59,10 +63,8 @@ await sdk.appendSessionEvents({
     client: apiClient,
     path: { bank_id: 'my-bank', session_id: sessionId },
     body: {
-        events: [
-            { id: '4', role: 'assistant', kind: 'message', text: 'Fixed: half cents round down.' },
-            { id: '5', role: 'assistant', kind: 'turn_end' },
-        ],
+        messages: [{ id: '4', role: 'assistant', content: 'Fixed: half cents round down.' }],
+        turn_end: true,
         ack: delivered,
     },
 });
@@ -89,14 +91,10 @@ const { data: sessions } = await sdk.listSessions({
     query: { limit: 20 },
 });
 for (const s of sessions.items) {
-    console.log(s.session_id, s.status, s.note_count, s.delivered_count);
+    console.log(s.session_id, s.last_event_at, s.note_count, s.delivered_count);
 }
 // [/docs:sessions-list]
 
-// [docs:sessions-close]
-// Closing saves what is not saved yet. A later append opens the session again.
-await sdk.closeSession({ client: apiClient, path: { bank_id: 'my-bank', session_id: sessionId } });
-// [/docs:sessions-close]
 
 // [docs:sessions-delete]
 // Deletes the session and its log. The document it saved stays: that is memory now.

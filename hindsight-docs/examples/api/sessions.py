@@ -8,7 +8,7 @@ import os
 import uuid
 
 from hindsight_client import Hindsight
-from hindsight_client_api.models import SessionAppendRequest, SessionEventIn, SessionOptions
+from hindsight_client_api.models import SessionAppendRequest
 
 HINDSIGHT_URL = os.getenv("HINDSIGHT_API_URL", "http://localhost:8888")
 
@@ -21,23 +21,23 @@ session_id = f"chat-{uuid.uuid4().hex[:8]}"
 
 async def main() -> None:
     # [docs:sessions-append]
-    # Send what happened since the last append. Each event has your own id: sending the
-    # same event again (a retry after a lost response) stores nothing twice. The first
-    # append creates the session.
+    # Send the messages since the last append, in the OpenAI chat format your agent likely
+    # keeps already, each with your own id: sending one again (a retry after a lost response)
+    # stores nothing twice. The first append creates the session.
     r = await client.sessions.append_session_events(
         "my-bank",
         session_id,
-        SessionAppendRequest(
-            session=SessionOptions(title="Fix the rounding bug", watch=True, retain="turns"),
-            events=[
-                SessionEventIn(id="1", role="user", kind="message", text="Half cents round the wrong way."),
-                SessionEventIn(
-                    id="2", role="assistant", kind="tool_call", tool="Edit", call_id="t1",
-                    input={"file_path": "pay/rounding.py"},
-                ),
-                SessionEventIn(id="3", role="tool", kind="tool_result", call_id="t1", text="updated"),
+        SessionAppendRequest.from_dict({
+            "session": {"watch": True, "retain": "turns"},
+            "messages": [
+                {"id": "1", "role": "user", "content": "Half cents round the wrong way."},
+                {"id": "2", "role": "assistant", "tool_calls": [{
+                    "id": "t1", "type": "function",
+                    "function": {"name": "edit_file", "arguments": '{"path": "pay/rounding.py"}'},
+                }]},
+                {"id": "3", "role": "tool", "tool_call_id": "t1", "content": "updated"},
             ],
-        ),
+        }),
     )
     print(r.accepted, r.last_seq, r.checking)
     # [/docs:sessions-append]
@@ -47,11 +47,11 @@ async def main() -> None:
     # the response carries the notes after it, so a note is handed over until you confirm it.
     delivered = 0
     r = await client.sessions.append_session_events(
-        "my-bank", session_id, SessionAppendRequest(events=[], ack=delivered)
+        "my-bank", session_id, SessionAppendRequest(ack=delivered)
     )
     for note in r.notes:
         source = note.source.document_id if note.source else "memory"
-        print(f"[{note.trigger}] {note.text} (source: {source})")
+        print(f"#{note.seq} {note.text} (source: {source})")
         delivered = note.seq
     # [/docs:sessions-notes]
 
@@ -61,13 +61,11 @@ async def main() -> None:
     await client.sessions.append_session_events(
         "my-bank",
         session_id,
-        SessionAppendRequest(
-            events=[
-                SessionEventIn(id="4", role="assistant", kind="message", text="Fixed: half cents round down."),
-                SessionEventIn(id="5", role="assistant", kind="turn_end"),
-            ],
-            ack=delivered,
-        ),
+        SessionAppendRequest.from_dict({
+            "messages": [{"id": "4", "role": "assistant", "content": "Fixed: half cents round down."}],
+            "turn_end": True,
+            "ack": delivered,
+        }),
     )
     # [/docs:sessions-turn-end]
 
@@ -83,13 +81,9 @@ async def main() -> None:
     # [docs:sessions-list]
     sessions = await client.sessions.list_sessions("my-bank", limit=20)
     for s in sessions.items:
-        print(s.session_id, s.status, s.note_count, s.delivered_count)
+        print(s.session_id, s.last_event_at, s.note_count, s.delivered_count)
     # [/docs:sessions-list]
 
-    # [docs:sessions-close]
-    # Closing saves what is not saved yet. A later append opens the session again.
-    await client.sessions.close_session("my-bank", session_id)
-    # [/docs:sessions-close]
 
     # [docs:sessions-delete]
     # Deletes the session and its log. The document it saved stays: that is memory now.

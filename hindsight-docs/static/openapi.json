@@ -4164,10 +4164,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Case-insensitive match on the session id or title",
+              "description": "Case-insensitive match on the session id",
               "title": "Q"
             },
-            "description": "Case-insensitive match on the session id or title"
+            "description": "Case-insensitive match on the session id"
           },
           {
             "name": "limit",
@@ -4349,74 +4349,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeleteResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/default/banks/{bank_id}/sessions/{session_id}/close": {
-      "post": {
-        "tags": [
-          "Sessions"
-        ],
-        "summary": "Close a session",
-        "description": "Mark the session finished. A later append opens it again.",
-        "operationId": "close_session",
-        "parameters": [
-          {
-            "name": "bank_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Bank Id"
-            }
-          },
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Session Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionSummary"
                 }
               }
             }
@@ -11444,6 +11376,31 @@
         ],
         "title": "Content",
         "description": "The raw content to retain or extract from. Either a plain string or an ordered list of content blocks."
+      },
+      "ContentPart": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "ContentPart",
+        "description": "A part of a message's content, as in the OpenAI format. Only text parts are read."
       },
       "CreateBankAliasRequest": {
         "properties": {
@@ -19687,13 +19644,32 @@
       },
       "SessionAppendRequest": {
         "properties": {
-          "events": {
+          "messages": {
             "items": {
-              "$ref": "#/components/schemas/SessionEventIn"
+              "$ref": "#/components/schemas/SessionMessage"
             },
             "type": "array",
             "maxItems": 500,
-            "title": "Events"
+            "title": "Messages"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State",
+            "description": "A snapshot of the work after these messages, said by no one: for a coding agent `{\"diff\": \"...\"}`, the `git diff` of everything it changed so far. The watcher judges an edit against it. Never saved into memory."
+          },
+          "turn_end": {
+            "type": "boolean",
+            "title": "Turn End",
+            "description": "The assistant finished its turn after these messages: the turn is saved into memory (with `retain: turns`). Sent again with nothing new in between, it is the same turn end.",
+            "default": false
           },
           "ack": {
             "anyOf": [
@@ -19724,25 +19700,6 @@
       },
       "SessionAppendResponse": {
         "properties": {
-          "session_id": {
-            "type": "string",
-            "title": "Session Id"
-          },
-          "accepted": {
-            "type": "integer",
-            "title": "Accepted",
-            "description": "Events stored by this append."
-          },
-          "duplicates": {
-            "type": "integer",
-            "title": "Duplicates",
-            "description": "Events already stored, by their id."
-          },
-          "last_seq": {
-            "type": "integer",
-            "title": "Last Seq",
-            "description": "The session log's last position."
-          },
           "notes": {
             "items": {
               "$ref": "#/components/schemas/SessionNote"
@@ -19759,10 +19716,6 @@
         },
         "type": "object",
         "required": [
-          "session_id",
-          "accepted",
-          "duplicates",
-          "last_seq",
           "notes",
           "checking"
         ],
@@ -19825,126 +19778,6 @@
         ],
         "title": "SessionEvent"
       },
-      "SessionEventIn": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Id",
-            "description": "The client's id for this event, unique in the session. Sending it again is a no-op: an append that is retried after a lost response stores nothing twice."
-          },
-          "role": {
-            "type": "string",
-            "enum": [
-              "user",
-              "assistant",
-              "tool",
-              "system"
-            ],
-            "title": "Role",
-            "description": "Who it came from: the user, the assistant, a tool, or the system."
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "message",
-              "tool_call",
-              "tool_result",
-              "state",
-              "turn_end"
-            ],
-            "title": "Kind",
-            "description": "`message`: something said. `tool_call`: the assistant calling a tool (`tool`, `input`, `call_id`). `tool_result`: what the tool returned (`call_id`, `text`, `is_error`). `state`: a snapshot of the work, not said by anyone (`data`, e.g. `{diff}` for a coding agent's change so far). `turn_end`: the assistant finished its turn.",
-            "default": "message"
-          },
-          "text": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 100000
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Text"
-          },
-          "tool": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 256
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tool"
-          },
-          "call_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 256
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Call Id"
-          },
-          "input": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Input"
-          },
-          "is_error": {
-            "type": "boolean",
-            "title": "Is Error",
-            "default": false
-          },
-          "data": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Data"
-          },
-          "ts": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ts",
-            "description": "When it happened, by the client's clock."
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "role"
-        ],
-        "title": "SessionEventIn",
-        "description": "One thing that happened in the conversation, as the client saw it."
-      },
       "SessionEventsResponse": {
         "properties": {
           "items": {
@@ -19959,10 +19792,6 @@
             "title": "Last Seq",
             "description": "The log's last position now: poll again with `after` set to it."
           },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
           "checking": {
             "type": "boolean",
             "title": "Checking"
@@ -19972,7 +19801,6 @@
         "required": [
           "items",
           "last_seq",
-          "status",
           "checking"
         ],
         "title": "SessionEventsResponse"
@@ -20008,26 +19836,109 @@
         ],
         "title": "SessionListResponse"
       },
+      "SessionMessage": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Id",
+            "description": "The client's id for this message, unique in the session. Sending it again is a no-op: an append that is retried after a lost response stores nothing twice."
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant",
+              "tool",
+              "system"
+            ],
+            "title": "Role"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ContentPart"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content",
+            "description": "What was said: a string, or a list of parts whose text parts are read."
+          },
+          "tool_calls": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ToolCall"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Calls",
+            "description": "The tools an assistant message calls."
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Call Id",
+            "description": "On a `tool` message: the call it answers."
+          },
+          "is_error": {
+            "type": "boolean",
+            "title": "Is Error",
+            "description": "On a `tool` message: the tool failed.",
+            "default": false
+          },
+          "ts": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts",
+            "description": "When it happened, by the client's clock."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role"
+        ],
+        "title": "SessionMessage",
+        "description": "One message of the conversation, in the OpenAI chat format most agents already keep, plus the\nclient's own `id`. Unknown keys (a name, reasoning, ...) are ignored, so a client can send the\nmessages it already has as they are."
+      },
       "SessionNote": {
         "properties": {
           "seq": {
             "type": "integer",
-            "title": "Seq"
+            "title": "Seq",
+            "description": "Its position in the log: acknowledge it by sending it back as `ack`."
           },
           "text": {
             "type": "string",
             "title": "Text"
-          },
-          "trigger": {
-            "type": "string",
-            "title": "Trigger"
-          },
-          "memory_ids": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Memory Ids"
           },
           "source": {
             "anyOf": [
@@ -20038,21 +19949,15 @@
                 "type": "null"
               }
             ]
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
           }
         },
         "type": "object",
         "required": [
           "seq",
-          "text",
-          "trigger",
-          "created_at"
+          "text"
         ],
-        "title": "SessionNote"
+        "title": "SessionNote",
+        "description": "A note for the agent. What the watcher checked and the memories it used are in the session's\nevent log (the note's `note` entry and its `check`)."
       },
       "SessionNoteSource": {
         "properties": {
@@ -20077,46 +19982,17 @@
               }
             ],
             "title": "Mentioned At"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Metadata"
           }
         },
         "type": "object",
         "required": [
           "document_id"
         ],
-        "title": "SessionNoteSource"
+        "title": "SessionNoteSource",
+        "description": "Where a note comes from, so the agent can check it before acting on it."
       },
       "SessionOptions": {
         "properties": {
-          "title": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 1000
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          },
-          "source": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 256
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source",
-            "description": "What is sending the session, e.g. `claude-code`."
-          },
           "document_id": {
             "anyOf": [
               {
@@ -20148,7 +20024,7 @@
                 "type": "string",
                 "enum": [
                   "turns",
-                  "close",
+                  "idle",
                   "off"
                 ]
               },
@@ -20157,7 +20033,7 @@
               }
             ],
             "title": "Retain",
-            "description": "When the conversation is saved into its document: at the end of each turn (`turns`, the default), only when the session closes (`close`), or never (`off`)."
+            "description": "When the conversation is saved into its document: at the end of each turn and when the session goes idle (`turns`, the default), only when the session goes idle (`idle`: one extraction for the whole session), or never (`off`)."
           },
           "tags": {
             "anyOf": [
@@ -20239,7 +20115,8 @@
                 "type": "null"
               }
             ],
-            "title": "Metadata"
+            "title": "Metadata",
+            "description": "Free-form labels, merged across appends and copied onto the saved document. `harness` names the client (e.g. `claude-code`): the UI shows its logo."
           }
         },
         "type": "object",
@@ -20255,32 +20132,6 @@
           "document_id": {
             "type": "string",
             "title": "Document Id"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          },
-          "source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
           },
           "watch": {
             "type": "boolean",
@@ -20356,7 +20207,6 @@
         "required": [
           "session_id",
           "document_id",
-          "status",
           "watch",
           "retain",
           "event_count",
@@ -20826,6 +20676,60 @@
           "output_tokens": 500,
           "total_tokens": 2000
         }
+      },
+      "ToolCall": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Id",
+            "description": "Matched by the `tool` message that answers it."
+          },
+          "type": {
+            "type": "string",
+            "const": "function",
+            "title": "Type",
+            "default": "function"
+          },
+          "function": {
+            "$ref": "#/components/schemas/ToolCallFunction"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "function"
+        ],
+        "title": "ToolCall"
+      },
+      "ToolCallFunction": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Name"
+          },
+          "arguments": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            ],
+            "title": "Arguments",
+            "description": "The tool's arguments: a JSON object, or the JSON string OpenAI sends."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "arguments"
+        ],
+        "title": "ToolCallFunction"
       },
       "ToolCallsIncludeOptions": {
         "properties": {

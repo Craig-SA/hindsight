@@ -23,30 +23,28 @@ func main() {
 	sessionID := fmt.Sprintf("chat-%08x", rand.Uint32())
 
 	// [docs:sessions-append]
-	// Send what happened since the last append. Each event has your own id: sending the
-	// same event again (a retry after a lost response) stores nothing twice. The first
-	// append creates the session.
+	// Send the messages since the last append, in the OpenAI chat format your agent likely
+	// keeps already, each with your own id: sending one again (a retry after a lost response)
+	// stores nothing twice. The first append creates the session.
 	opts := hindsight.NewSessionOptions()
 	opts.SetTitle("Fix the rounding bug")
 	opts.SetWatch(true)
 	opts.SetRetain("turns")
 
-	ask := hindsight.NewSessionEventIn("1", "user")
-	ask.SetKind("message")
-	ask.SetText("Half cents round the wrong way.")
-	call := hindsight.NewSessionEventIn("2", "assistant")
-	call.SetKind("tool_call")
-	call.SetTool("Edit")
-	call.SetCallId("t1")
-	call.SetInput(map[string]interface{}{"file_path": "pay/rounding.py"})
-	result := hindsight.NewSessionEventIn("3", "tool")
-	result.SetKind("tool_result")
-	result.SetCallId("t1")
-	result.SetText("updated")
+	text := func(s string) hindsight.Content1 { return hindsight.Content1{String: &s} }
+	ask := hindsight.NewSessionMessage("1", "user")
+	ask.SetContent(text("Half cents round the wrong way."))
+	args := `{"path": "pay/rounding.py"}`
+	call := hindsight.NewSessionMessage("2", "assistant")
+	call.SetToolCalls([]hindsight.ToolCall{*hindsight.NewToolCall("t1",
+		*hindsight.NewToolCallFunction("edit_file", hindsight.Arguments{String: &args}))})
+	result := hindsight.NewSessionMessage("3", "tool")
+	result.SetToolCallId("t1")
+	result.SetContent(text("updated"))
 
 	req := hindsight.NewSessionAppendRequest()
 	req.SetSession(*opts)
-	req.SetEvents([]hindsight.SessionEventIn{*ask, *call, *result})
+	req.SetMessages([]hindsight.SessionMessage{*ask, *call, *result})
 	appended, _, err := client.SessionsAPI.AppendSessionEvents(ctx, "my-bank", sessionID).
 		SessionAppendRequest(*req).Execute()
 	if err != nil {
@@ -60,7 +58,6 @@ func main() {
 	// the response carries the notes after it, so a note is handed over until you confirm it.
 	delivered := int32(0)
 	poll := hindsight.NewSessionAppendRequest()
-	poll.SetEvents([]hindsight.SessionEventIn{})
 	poll.SetAck(delivered)
 	polled, _, err := client.SessionsAPI.AppendSessionEvents(ctx, "my-bank", sessionID).
 		SessionAppendRequest(*poll).Execute()
@@ -68,7 +65,7 @@ func main() {
 		log.Fatalf("poll: %v", err)
 	}
 	for _, note := range polled.Notes {
-		fmt.Printf("[%s] %s\n", note.Trigger, note.Text)
+		fmt.Printf("#%d %s\n", note.Seq, note.Text)
 		delivered = note.Seq
 	}
 	// [/docs:sessions-notes]
@@ -76,13 +73,11 @@ func main() {
 	// [docs:sessions-turn-end]
 	// The end of a turn saves the conversation into the session's document
 	// (`session:<id>` unless you named one), where memories are extracted from it.
-	reply := hindsight.NewSessionEventIn("4", "assistant")
-	reply.SetKind("message")
-	reply.SetText("Fixed: half cents round down.")
-	end := hindsight.NewSessionEventIn("5", "assistant")
-	end.SetKind("turn_end")
+	reply := hindsight.NewSessionMessage("4", "assistant")
+	reply.SetContent(text("Fixed: half cents round down."))
 	turn := hindsight.NewSessionAppendRequest()
-	turn.SetEvents([]hindsight.SessionEventIn{*reply, *end})
+	turn.SetMessages([]hindsight.SessionMessage{*reply})
+	turn.SetTurnEnd(true)
 	turn.SetAck(delivered)
 	if _, _, err := client.SessionsAPI.AppendSessionEvents(ctx, "my-bank", sessionID).
 		SessionAppendRequest(*turn).Execute(); err != nil {
@@ -108,16 +103,10 @@ func main() {
 		log.Fatalf("list: %v", err)
 	}
 	for _, s := range sessions.Items {
-		fmt.Println(s.SessionId, s.Status, s.NoteCount, s.DeliveredCount)
+		fmt.Println(s.SessionId, s.GetLastEventAt(), s.NoteCount, s.DeliveredCount)
 	}
 	// [/docs:sessions-list]
 
-	// [docs:sessions-close]
-	// Closing saves what is not saved yet. A later append opens the session again.
-	if _, _, err := client.SessionsAPI.CloseSession(ctx, "my-bank", sessionID).Execute(); err != nil {
-		log.Fatalf("close: %v", err)
-	}
-	// [/docs:sessions-close]
 
 	// [docs:sessions-delete]
 	// Deletes the session and its log. The document it saved stays: that is memory now.

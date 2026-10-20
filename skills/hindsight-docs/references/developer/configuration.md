@@ -2611,6 +2611,7 @@ How the memory watcher paces its checks on a live [session](./api/sessions.md). 
 |----------|-------------|---------|
 | `HINDSIGHT_API_SESSION_CHECK_QUIET_MS` | A session's moment is checked once the session has been quiet this long, so an agent's plan and the command right after it are one check, not two. The check waits in the queue meanwhile (no worker held). Measured by the database's clock, so it holds whichever server took the append and whichever worker runs the check. | `1000` |
 | `HINDSIGHT_API_SESSION_CHECK_MAX_WAIT_MS` | ...and at the latest this long after the moment appeared, so a session that never pauses is still checked. | `3000` |
+| `HINDSIGHT_API_SESSION_IDLE_MS` | A session that has been quiet this long is idle: the turns not yet saved are saved into its document. This covers a client that stops mid-turn, and is the only save for `retain: idle`. Also measured by the database's clock. | `600000` |
 
 ### Distributed Workers
 
