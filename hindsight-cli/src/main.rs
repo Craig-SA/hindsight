@@ -100,7 +100,7 @@ enum Commands {
     #[command(subcommand)]
     Operation(OperationCommands),
 
-    /// Live sessions: list, follow, append, close, delete
+    /// Live sessions: list, follow, append, delete
     #[command(subcommand)]
     Session(SessionCommands),
 
@@ -1080,7 +1080,7 @@ enum SessionCommands {
         /// Bank ID
         bank_id: String,
 
-        /// Match on the session id or title
+        /// Match on the session id
         #[arg(short = 'q', long)]
         query: Option<String>,
 
@@ -1108,45 +1108,38 @@ enum SessionCommands {
         /// Session ID
         session_id: String,
 
-        /// A JSON file holding an array of events (instead of one event from the flags)
+        /// A JSON file holding an array of OpenAI-style messages, each with an `id`
+        /// (instead of one message from the flags)
         #[arg(long)]
-        events_file: Option<String>,
+        messages_file: Option<String>,
 
-        /// The event's own id: sending it again stores nothing twice (default: a fresh one)
+        /// The message's own id: sending it again stores nothing twice (default: a fresh one)
         #[arg(long)]
         id: Option<String>,
 
-        /// Who it came from: user, assistant, tool, system
+        /// Who said it: user, assistant, tool, system
         #[arg(long, default_value = "user")]
         role: String,
 
-        /// message, tool_call, tool_result, state, turn_end
-        #[arg(long, default_value = "message")]
-        kind: String,
-
-        /// What was said (or a tool's output)
+        /// What was said (or, with --role tool, what the tool returned)
         #[arg(long)]
         text: Option<String>,
 
-        /// The tool called (tool_call)
+        /// With --role tool: the tool call this answers
         #[arg(long)]
-        tool: Option<String>,
+        tool_call_id: Option<String>,
 
-        /// Pairs a tool_result with its tool_call
+        /// The assistant finished its turn: the turn is saved into memory
         #[arg(long)]
-        call_id: Option<String>,
+        turn_end: bool,
 
         /// Turn the memory watcher on for this session
         #[arg(long)]
         watch: bool,
 
-        /// When the conversation is saved: turns, close, off
+        /// When the conversation is saved: turns, idle, off
         #[arg(long)]
         retain: Option<String>,
-
-        /// The session's title
-        #[arg(long)]
-        title: Option<String>,
 
         /// The seq of the last note you delivered: only notes after it come back
         #[arg(long)]
@@ -1168,17 +1161,9 @@ enum SessionCommands {
         #[arg(short = 'l', long, default_value = "200")]
         limit: u64,
 
-        /// Keep following the session until it is closed
+        /// Keep following the session live (Ctrl-C to stop)
         #[arg(short = 'f', long)]
         follow: bool,
-    },
-
-    /// Close a session (saves what is not saved yet)
-    Close {
-        /// Bank ID
-        bank_id: String,
-        /// Session ID
-        session_id: String,
     },
 
     /// Delete a session and its log (the document it saved stays)
@@ -2113,35 +2098,28 @@ fn run() -> Result<()> {
             SessionCommands::Append {
                 bank_id,
                 session_id,
-                events_file,
+                messages_file,
                 id,
                 role,
-                kind,
                 text,
-                tool,
-                call_id,
+                tool_call_id,
+                turn_end,
                 watch,
                 retain,
-                title,
                 ack,
             } => commands::session::append(
                 &client,
                 &bank_id,
                 &session_id,
-                commands::session::EventArgs {
-                    events_file,
+                commands::session::MessageArgs {
+                    messages_file,
                     id,
                     role,
-                    kind,
                     text,
-                    tool,
-                    call_id,
+                    tool_call_id,
+                    turn_end,
                 },
-                commands::session::SessionArgs {
-                    watch,
-                    retain,
-                    title,
-                },
+                commands::session::SessionArgs { watch, retain },
                 ack,
                 output_format,
             ),
@@ -2160,10 +2138,6 @@ fn run() -> Result<()> {
                 follow,
                 output_format,
             ),
-            SessionCommands::Close {
-                bank_id,
-                session_id,
-            } => commands::session::close(&client, &bank_id, &session_id, output_format),
             SessionCommands::Delete {
                 bank_id,
                 session_id,

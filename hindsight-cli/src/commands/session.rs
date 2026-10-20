@@ -129,15 +129,13 @@ pub fn list(
         println!("  {}", ui::dim("No sessions."));
     }
     for s in &items {
-        let title = s
-            .get("title")
-            .and_then(Value::as_str)
-            .unwrap_or_else(|| s["session_id"].as_str().unwrap_or(""));
         println!(
-            "  {} {} {}",
+            "  {} {}",
             s["session_id"].as_str().unwrap_or_default(),
-            ui::dim(&format!("[{}]", s["status"].as_str().unwrap_or_default())),
-            clip(title, 60)
+            ui::dim(&format!(
+                "[{}]",
+                s["metadata"]["harness"].as_str().unwrap_or("-")
+            ))
         );
         println!(
             "    {}",
@@ -173,76 +171,69 @@ pub fn get(
     )
 }
 
-/// The events to send: from a JSON file (an array of events), or one event from the flags.
-pub struct EventArgs {
-    pub events_file: Option<String>,
+/// The messages to send: from a JSON file (an array of OpenAI-style messages, each with an `id`),
+/// or one message from the flags; plus whether the turn ended.
+pub struct MessageArgs {
+    pub messages_file: Option<String>,
     pub id: Option<String>,
     pub role: String,
-    pub kind: String,
     pub text: Option<String>,
-    pub tool: Option<String>,
-    pub call_id: Option<String>,
+    pub tool_call_id: Option<String>,
+    pub turn_end: bool,
 }
 
 pub struct SessionArgs {
     pub watch: bool,
     pub retain: Option<String>,
-    pub title: Option<String>,
 }
 
-fn events_of(a: &EventArgs) -> Result<Vec<Value>> {
-    if let Some(path) = &a.events_file {
+fn messages_of(a: &MessageArgs) -> Result<Vec<Value>> {
+    if let Some(path) = &a.messages_file {
         let raw = std::fs::read_to_string(path).with_context(|| format!("reading {path}"))?;
-        let events: Vec<Value> =
-            serde_json::from_str(&raw).context("the events file must be a JSON array of events")?;
-        return Ok(events);
+        let messages: Vec<Value> = serde_json::from_str(&raw)
+            .context("the messages file must be a JSON array of messages")?;
+        return Ok(messages);
     }
-    if a.text.is_none() && a.tool.is_none() && a.kind == "message" {
-        return Ok(vec![]); // nothing to send: fetch notes
-    }
-    // Without an id a retry would store the event again; with the clock, two calls never collide.
+    let Some(text) = &a.text else {
+        return Ok(vec![]); // nothing said: fetch notes (or end the turn)
+    };
+    // Without an id a retry would store the message again; with the clock, two calls never collide.
     let id = a.id.clone().unwrap_or_else(|| {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default();
         format!("cli-{}", now.as_nanos())
     });
-    let mut e = json!({"id": id, "role": a.role, "kind": a.kind});
-    if let Some(t) = &a.text {
-        e["text"] = json!(t);
+    let mut m = json!({"id": id, "role": a.role, "content": text});
+    if let Some(c) = &a.tool_call_id {
+        m["tool_call_id"] = json!(c);
     }
-    if let Some(t) = &a.tool {
-        e["tool"] = json!(t);
-    }
-    if let Some(c) = &a.call_id {
-        e["call_id"] = json!(c);
-    }
-    Ok(vec![e])
+    Ok(vec![m])
 }
 
 pub fn append(
     client: &ApiClient,
     bank_id: &str,
     session_id: &str,
-    events: EventArgs,
+    messages: MessageArgs,
     session: SessionArgs,
     ack: Option<u64>,
     output_format: OutputFormat,
 ) -> Result<()> {
-    let mut body = json!({"events": events_of(&events)?});
+    let mut body = json!({"messages": messages_of(&messages)?});
+    if messages.turn_end {
+        body["turn_end"] = json!(true);
+    }
     if let Some(a) = ack {
         body["ack"] = json!(a);
     }
-    if session.watch || session.retain.is_some() || session.title.is_some() {
+    if session.watch || session.retain.is_some() {
         let mut opts = json!({});
         if session.watch {
             opts["watch"] = json!(true);
         }
         if let Some(r) = &session.retain {
             opts["retain"] = json!(r);
-        }
-        if let Some(t) = &session.title {
-            opts["title"] = json!(t);
         }
         body["session"] = opts;
     }
@@ -251,17 +242,11 @@ pub fn append(
         return output::print_output(&result, output_format);
     }
     let v = serde_json::to_value(&result)?;
-    ui::print_success(&format!(
-        "{} stored, {} already there; the log is at #{}{}",
-        v["accepted"],
-        v["duplicates"],
-        v["last_seq"],
-        if v["checking"].as_bool().unwrap_or(false) {
-            " (Hindsight is checking)"
-        } else {
-            ""
-        }
-    ));
+    ui::print_success(if v["checking"].as_bool().unwrap_or(false) {
+        "Sent (Hindsight is checking)"
+    } else {
+        "Sent"
+    });
     for n in v["notes"].as_array().cloned().unwrap_or_default() {
         println!(
             "  {} {}",
@@ -304,30 +289,9 @@ pub fn events(
             }
             continue;
         }
-        if caught_up
-            && v["status"].as_str() == Some("closed")
-            && !v["checking"].as_bool().unwrap_or(false)
-        {
-            return Ok(());
-        }
         if caught_up {
             std::thread::sleep(FOLLOW_EVERY);
         }
-    }
-}
-
-pub fn close(
-    client: &ApiClient,
-    bank_id: &str,
-    session_id: &str,
-    output_format: OutputFormat,
-) -> Result<()> {
-    let result = client.close_session(bank_id, session_id)?;
-    if output_format == OutputFormat::Pretty {
-        ui::print_success(&format!("Session '{}' closed", session_id));
-        Ok(())
-    } else {
-        output::print_output(&result, output_format)
     }
 }
 
@@ -348,7 +312,7 @@ pub fn delete(
 
 #[cfg(test)]
 mod tests {
-    use super::{entry_line, events_of, EventArgs};
+    use super::{entry_line, messages_of, MessageArgs};
     use serde_json::json;
 
     fn plain(s: String) -> String {
@@ -380,20 +344,19 @@ mod tests {
     }
 
     #[test]
-    fn one_event_from_the_flags_or_none_to_fetch_notes() {
-        let args = |text: Option<&str>| EventArgs {
-            events_file: None,
-            id: Some("e1".into()),
+    fn one_message_from_the_flags_or_none_to_fetch_notes() {
+        let args = |text: Option<&str>| MessageArgs {
+            messages_file: None,
+            id: Some("m1".into()),
             role: "user".into(),
-            kind: "message".into(),
             text: text.map(str::to_string),
-            tool: None,
-            call_id: None,
+            tool_call_id: None,
+            turn_end: false,
         };
         assert_eq!(
-            events_of(&args(Some("hi"))).unwrap(),
-            vec![json!({"id": "e1", "role": "user", "kind": "message", "text": "hi"})]
+            messages_of(&args(Some("hi"))).unwrap(),
+            vec![json!({"id": "m1", "role": "user", "content": "hi"})]
         );
-        assert!(events_of(&args(None)).unwrap().is_empty());
+        assert!(messages_of(&args(None)).unwrap().is_empty());
     }
 }

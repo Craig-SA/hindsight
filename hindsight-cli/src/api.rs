@@ -971,17 +971,6 @@ impl ApiClient {
         })
     }
 
-    pub fn close_session(&self, bank_id: &str, session_id: &str) -> Result<types::SessionSummary> {
-        self.runtime.block_on(async {
-            let response = self
-                .client
-                .close_session(bank_id, session_id, None)
-                .humanized()
-                .await?;
-            Ok(response.into_inner())
-        })
-    }
-
     pub fn delete_session(&self, bank_id: &str, session_id: &str) -> Result<types::DeleteResponse> {
         self.runtime.block_on(async {
             let response = self
