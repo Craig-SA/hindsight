@@ -21,13 +21,6 @@ var _ MappedNullable = &SessionAppendResponse{}
 
 // SessionAppendResponse struct for SessionAppendResponse
 type SessionAppendResponse struct {
-	SessionId string `json:"session_id"`
-	// Events stored by this append.
-	Accepted int32 `json:"accepted"`
-	// Events already stored, by their id.
-	Duplicates int32 `json:"duplicates"`
-	// The session log's last position.
-	LastSeq int32 `json:"last_seq"`
 	// Notes after `ack`, oldest first.
 	Notes []SessionNote `json:"notes"`
 	// A watcher check is queued or running: another note may still come.
@@ -40,12 +33,8 @@ type _SessionAppendResponse SessionAppendResponse
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewSessionAppendResponse(sessionId string, accepted int32, duplicates int32, lastSeq int32, notes []SessionNote, checking bool) *SessionAppendResponse {
+func NewSessionAppendResponse(notes []SessionNote, checking bool) *SessionAppendResponse {
 	this := SessionAppendResponse{}
-	this.SessionId = sessionId
-	this.Accepted = accepted
-	this.Duplicates = duplicates
-	this.LastSeq = lastSeq
 	this.Notes = notes
 	this.Checking = checking
 	return &this
@@ -57,102 +46,6 @@ func NewSessionAppendResponse(sessionId string, accepted int32, duplicates int32
 func NewSessionAppendResponseWithDefaults() *SessionAppendResponse {
 	this := SessionAppendResponse{}
 	return &this
-}
-
-// GetSessionId returns the SessionId field value
-func (o *SessionAppendResponse) GetSessionId() string {
-	if o == nil {
-		var ret string
-		return ret
-	}
-
-	return o.SessionId
-}
-
-// GetSessionIdOk returns a tuple with the SessionId field value
-// and a boolean to check if the value has been set.
-func (o *SessionAppendResponse) GetSessionIdOk() (*string, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.SessionId, true
-}
-
-// SetSessionId sets field value
-func (o *SessionAppendResponse) SetSessionId(v string) {
-	o.SessionId = v
-}
-
-// GetAccepted returns the Accepted field value
-func (o *SessionAppendResponse) GetAccepted() int32 {
-	if o == nil {
-		var ret int32
-		return ret
-	}
-
-	return o.Accepted
-}
-
-// GetAcceptedOk returns a tuple with the Accepted field value
-// and a boolean to check if the value has been set.
-func (o *SessionAppendResponse) GetAcceptedOk() (*int32, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.Accepted, true
-}
-
-// SetAccepted sets field value
-func (o *SessionAppendResponse) SetAccepted(v int32) {
-	o.Accepted = v
-}
-
-// GetDuplicates returns the Duplicates field value
-func (o *SessionAppendResponse) GetDuplicates() int32 {
-	if o == nil {
-		var ret int32
-		return ret
-	}
-
-	return o.Duplicates
-}
-
-// GetDuplicatesOk returns a tuple with the Duplicates field value
-// and a boolean to check if the value has been set.
-func (o *SessionAppendResponse) GetDuplicatesOk() (*int32, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.Duplicates, true
-}
-
-// SetDuplicates sets field value
-func (o *SessionAppendResponse) SetDuplicates(v int32) {
-	o.Duplicates = v
-}
-
-// GetLastSeq returns the LastSeq field value
-func (o *SessionAppendResponse) GetLastSeq() int32 {
-	if o == nil {
-		var ret int32
-		return ret
-	}
-
-	return o.LastSeq
-}
-
-// GetLastSeqOk returns a tuple with the LastSeq field value
-// and a boolean to check if the value has been set.
-func (o *SessionAppendResponse) GetLastSeqOk() (*int32, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.LastSeq, true
-}
-
-// SetLastSeq sets field value
-func (o *SessionAppendResponse) SetLastSeq(v int32) {
-	o.LastSeq = v
 }
 
 // GetNotes returns the Notes field value
@@ -213,10 +106,6 @@ func (o SessionAppendResponse) MarshalJSON() ([]byte, error) {
 
 func (o SessionAppendResponse) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["session_id"] = o.SessionId
-	toSerialize["accepted"] = o.Accepted
-	toSerialize["duplicates"] = o.Duplicates
-	toSerialize["last_seq"] = o.LastSeq
 	toSerialize["notes"] = o.Notes
 	toSerialize["checking"] = o.Checking
 	return toSerialize, nil
@@ -227,10 +116,6 @@ func (o *SessionAppendResponse) UnmarshalJSON(data []byte) (err error) {
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"session_id",
-		"accepted",
-		"duplicates",
-		"last_seq",
 		"notes",
 		"checking",
 	}

@@ -19,8 +19,6 @@ var _ MappedNullable = &SessionOptions{}
 
 // SessionOptions How the session is set up. Applied when an append creates the session; later appends that carry options update the fields they set.
 type SessionOptions struct {
-	Title NullableString `json:"title,omitempty"`
-	Source NullableString `json:"source,omitempty"`
 	DocumentId NullableString `json:"document_id,omitempty"`
 	Watch NullableBool `json:"watch,omitempty"`
 	Retain NullableString `json:"retain,omitempty"`
@@ -46,90 +44,6 @@ func NewSessionOptions() *SessionOptions {
 func NewSessionOptionsWithDefaults() *SessionOptions {
 	this := SessionOptions{}
 	return &this
-}
-
-// GetTitle returns the Title field value if set, zero value otherwise (both if not set or set to explicit null).
-func (o *SessionOptions) GetTitle() string {
-	if o == nil || IsNil(o.Title.Get()) {
-		var ret string
-		return ret
-	}
-	return *o.Title.Get()
-}
-
-// GetTitleOk returns a tuple with the Title field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-// NOTE: If the value is an explicit nil, `nil, true` will be returned
-func (o *SessionOptions) GetTitleOk() (*string, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return o.Title.Get(), o.Title.IsSet()
-}
-
-// HasTitle returns a boolean if a field has been set.
-func (o *SessionOptions) HasTitle() bool {
-	if o != nil && o.Title.IsSet() {
-		return true
-	}
-
-	return false
-}
-
-// SetTitle gets a reference to the given NullableString and assigns it to the Title field.
-func (o *SessionOptions) SetTitle(v string) {
-	o.Title.Set(&v)
-}
-// SetTitleNil sets the value for Title to be an explicit nil
-func (o *SessionOptions) SetTitleNil() {
-	o.Title.Set(nil)
-}
-
-// UnsetTitle ensures that no value is present for Title, not even an explicit nil
-func (o *SessionOptions) UnsetTitle() {
-	o.Title.Unset()
-}
-
-// GetSource returns the Source field value if set, zero value otherwise (both if not set or set to explicit null).
-func (o *SessionOptions) GetSource() string {
-	if o == nil || IsNil(o.Source.Get()) {
-		var ret string
-		return ret
-	}
-	return *o.Source.Get()
-}
-
-// GetSourceOk returns a tuple with the Source field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-// NOTE: If the value is an explicit nil, `nil, true` will be returned
-func (o *SessionOptions) GetSourceOk() (*string, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return o.Source.Get(), o.Source.IsSet()
-}
-
-// HasSource returns a boolean if a field has been set.
-func (o *SessionOptions) HasSource() bool {
-	if o != nil && o.Source.IsSet() {
-		return true
-	}
-
-	return false
-}
-
-// SetSource gets a reference to the given NullableString and assigns it to the Source field.
-func (o *SessionOptions) SetSource(v string) {
-	o.Source.Set(&v)
-}
-// SetSourceNil sets the value for Source to be an explicit nil
-func (o *SessionOptions) SetSourceNil() {
-	o.Source.Set(nil)
-}
-
-// UnsetSource ensures that no value is present for Source, not even an explicit nil
-func (o *SessionOptions) UnsetSource() {
-	o.Source.Unset()
 }
 
 // GetDocumentId returns the DocumentId field value if set, zero value otherwise (both if not set or set to explicit null).
@@ -460,12 +374,6 @@ func (o SessionOptions) MarshalJSON() ([]byte, error) {
 
 func (o SessionOptions) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	if o.Title.IsSet() {
-		toSerialize["title"] = o.Title.Get()
-	}
-	if o.Source.IsSet() {
-		toSerialize["source"] = o.Source.Get()
-	}
 	if o.DocumentId.IsSet() {
 		toSerialize["document_id"] = o.DocumentId.Get()
 	}

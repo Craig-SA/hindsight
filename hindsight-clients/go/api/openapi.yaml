@@ -2897,7 +2897,7 @@ paths:
           title: Bank Id
           type: string
         style: simple
-      - description: Case-insensitive match on the session id or title
+      - description: Case-insensitive match on the session id
         explode: true
         in: query
         name: q
@@ -3038,51 +3038,6 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
           description: Validation Error
       summary: Get a session
-      tags:
-      - Sessions
-  /v1/default/banks/{bank_id}/sessions/{session_id}/close:
-    post:
-      description: Mark the session finished. A later append opens it again.
-      operationId: close_session
-      parameters:
-      - explode: false
-        in: path
-        name: bank_id
-        required: true
-        schema:
-          title: Bank Id
-          type: string
-        style: simple
-      - explode: false
-        in: path
-        name: session_id
-        required: true
-        schema:
-          title: Session Id
-          type: string
-        style: simple
-      - explode: false
-        in: header
-        name: authorization
-        required: false
-        schema:
-          nullable: true
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SessionSummary'
-          description: Successful Response
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Close a session
       tags:
       - Sessions
   /v1/default/banks/{bank_id}/documents/{document_id}/history:
@@ -7783,6 +7738,19 @@ components:
       description: The raw content to retain or extract from. Either a plain string
         or an ordered list of content blocks.
       title: Content
+    ContentPart:
+      description: "A part of a message's content, as in the OpenAI format. Only text\
+        \ parts are read."
+      properties:
+        type:
+          title: Type
+          type: string
+        text:
+          nullable: true
+          type: string
+      required:
+      - type
+      title: ContentPart
     CreateBankAliasRequest:
       description: Request model for adding an alias to a bank.
       example:
@@ -13360,81 +13328,117 @@ components:
           retain: turns
           context: context
           observation_scopes: per_tag
-          source: source
-          title: title
           document_id: document_id
           strategy: strategy
           tags:
           - tags
           - tags
         ack: 0
-        events:
-        - input:
-            key: ""
-          role: user
-          data:
-            key: ""
-          kind: message
+        messages:
+        - role: user
+          tool_call_id: tool_call_id
+          tool_calls:
+          - function:
+              name: name
+              arguments: Arguments
+            id: id
+            type: function
+          - function:
+              name: name
+              arguments: Arguments
+            id: id
+            type: function
           is_error: false
           id: id
-          text: text
-          tool: tool
-          call_id: call_id
+          content: Content_1
           ts: 2000-01-23T04:56:07.000+00:00
-        - input:
-            key: ""
-          role: user
-          data:
-            key: ""
-          kind: message
+        - role: user
+          tool_call_id: tool_call_id
+          tool_calls:
+          - function:
+              name: name
+              arguments: Arguments
+            id: id
+            type: function
+          - function:
+              name: name
+              arguments: Arguments
+            id: id
+            type: function
           is_error: false
           id: id
-          text: text
-          tool: tool
-          call_id: call_id
+          content: Content_1
           ts: 2000-01-23T04:56:07.000+00:00
-        - input:
-            key: ""
-          role: user
-          data:
-            key: ""
-          kind: message
+        - role: user
+          tool_call_id: tool_call_id
+          tool_calls:
+          - function:
+              name: name
+              arguments: Arguments
+            id: id
+            type: function
+          - function:
+              name: name
+              arguments: Arguments
+            id: id
+            type: function
           is_error: false
           id: id
-          text: text
-          tool: tool
-          call_id: call_id
+          content: Content_1
           ts: 2000-01-23T04:56:07.000+00:00
-        - input:
-            key: ""
-          role: user
-          data:
-            key: ""
-          kind: message
+        - role: user
+          tool_call_id: tool_call_id
+          tool_calls:
+          - function:
+              name: name
+              arguments: Arguments
+            id: id
+            type: function
+          - function:
+              name: name
+              arguments: Arguments
+            id: id
+            type: function
           is_error: false
           id: id
-          text: text
-          tool: tool
-          call_id: call_id
+          content: Content_1
           ts: 2000-01-23T04:56:07.000+00:00
-        - input:
-            key: ""
-          role: user
-          data:
-            key: ""
-          kind: message
+        - role: user
+          tool_call_id: tool_call_id
+          tool_calls:
+          - function:
+              name: name
+              arguments: Arguments
+            id: id
+            type: function
+          - function:
+              name: name
+              arguments: Arguments
+            id: id
+            type: function
           is_error: false
           id: id
-          text: text
-          tool: tool
-          call_id: call_id
+          content: Content_1
           ts: 2000-01-23T04:56:07.000+00:00
+        state:
+          key: ""
+        turn_end: false
       properties:
-        events:
+        messages:
           items:
-            $ref: '#/components/schemas/SessionEventIn'
+            $ref: '#/components/schemas/SessionMessage'
           maxItems: 500
           type: array
+        state:
+          additionalProperties: {}
+          nullable: true
+        turn_end:
+          default: false
+          description: "The assistant finished its turn after these messages: the\
+            \ turn is saved into memory (with `retain: turns`). Sent again with nothing\
+            \ new in between, it is the same turn end."
+          title: Turn End
+          type: boolean
         ack:
           minimum: 0.0
           nullable: true
@@ -13444,54 +13448,21 @@ components:
       title: SessionAppendRequest
     SessionAppendResponse:
       example:
-        duplicates: 6
         checking: true
         notes:
-        - created_at: 2000-01-23T04:56:07.000+00:00
-          text: text
-          trigger: trigger
+        - text: text
           source:
-            metadata:
-              key: ""
             quote: ""
             mentioned_at: 2000-01-23T04:56:07.000+00:00
             document_id: document_id
-          memory_ids:
-          - memory_ids
-          - memory_ids
-          seq: 5
-        - created_at: 2000-01-23T04:56:07.000+00:00
-          text: text
-          trigger: trigger
+          seq: 0
+        - text: text
           source:
-            metadata:
-              key: ""
             quote: ""
             mentioned_at: 2000-01-23T04:56:07.000+00:00
             document_id: document_id
-          memory_ids:
-          - memory_ids
-          - memory_ids
-          seq: 5
-        session_id: session_id
-        accepted: 0
-        last_seq: 1
+          seq: 0
       properties:
-        session_id:
-          title: Session Id
-          type: string
-        accepted:
-          description: Events stored by this append.
-          title: Accepted
-          type: integer
-        duplicates:
-          description: "Events already stored, by their id."
-          title: Duplicates
-          type: integer
-        last_seq:
-          description: The session log's last position.
-          title: Last Seq
-          type: integer
         notes:
           description: "Notes after `ack`, oldest first."
           items:
@@ -13503,12 +13474,8 @@ components:
           title: Checking
           type: boolean
       required:
-      - accepted
       - checking
-      - duplicates
-      - last_seq
       - notes
-      - session_id
       title: SessionAppendResponse
     SessionEvent:
       example:
@@ -13558,86 +13525,6 @@ components:
       - seq
       - source
       title: SessionEvent
-    SessionEventIn:
-      description: "One thing that happened in the conversation, as the client saw\
-        \ it."
-      example:
-        input:
-          key: ""
-        role: user
-        data:
-          key: ""
-        kind: message
-        is_error: false
-        id: id
-        text: text
-        tool: tool
-        call_id: call_id
-        ts: 2000-01-23T04:56:07.000+00:00
-      properties:
-        id:
-          description: "The client's id for this event, unique in the session. Sending\
-            \ it again is a no-op: an append that is retried after a lost response\
-            \ stores nothing twice."
-          maxLength: 256
-          minLength: 1
-          title: Id
-          type: string
-        role:
-          description: "Who it came from: the user, the assistant, a tool, or the\
-            \ system."
-          enum:
-          - user
-          - assistant
-          - tool
-          - system
-          title: Role
-          type: string
-        kind:
-          default: message
-          description: "`message`: something said. `tool_call`: the assistant calling\
-            \ a tool (`tool`, `input`, `call_id`). `tool_result`: what the tool returned\
-            \ (`call_id`, `text`, `is_error`). `state`: a snapshot of the work, not\
-            \ said by anyone (`data`, e.g. `{diff}` for a coding agent's change so\
-            \ far). `turn_end`: the assistant finished its turn."
-          enum:
-          - message
-          - tool_call
-          - tool_result
-          - state
-          - turn_end
-          title: Kind
-          type: string
-        text:
-          maxLength: 100000
-          nullable: true
-          type: string
-        tool:
-          maxLength: 256
-          nullable: true
-          type: string
-        call_id:
-          maxLength: 256
-          nullable: true
-          type: string
-        input:
-          additionalProperties: {}
-          nullable: true
-        is_error:
-          default: false
-          title: Is Error
-          type: boolean
-        data:
-          additionalProperties: {}
-          nullable: true
-        ts:
-          format: date-time
-          nullable: true
-          type: string
-      required:
-      - id
-      - role
-      title: SessionEventIn
     SessionEventsResponse:
       example:
         checking: true
@@ -13659,7 +13546,6 @@ components:
           seq: 0
           ts: 2000-01-23T04:56:07.000+00:00
         last_seq: 6
-        status: status
       properties:
         items:
           items:
@@ -13670,9 +13556,6 @@ components:
             \ it."
           title: Last Seq
           type: integer
-        status:
-          title: Status
-          type: string
         checking:
           title: Checking
           type: boolean
@@ -13680,7 +13563,6 @@ components:
       - checking
       - items
       - last_seq
-      - status
       title: SessionEventsResponse
     SessionListResponse:
       example:
@@ -13696,9 +13578,7 @@ components:
           retain: retain
           session_id: session_id
           created_at: 2000-01-23T04:56:07.000+00:00
-          source: source
           document_id: document_id
-          title: title
           acked_seq: 7
           saved_seq: 2
           last_event_at: 2000-01-23T04:56:07.000+00:00
@@ -13707,7 +13587,6 @@ components:
           watch: true
           note_count: 1
           last_seq: 5
-          status: status
         - check_count: 6
           checking: true
           metadata:
@@ -13716,9 +13595,7 @@ components:
           retain: retain
           session_id: session_id
           created_at: 2000-01-23T04:56:07.000+00:00
-          source: source
           document_id: document_id
-          title: title
           acked_seq: 7
           saved_seq: 2
           last_event_at: 2000-01-23T04:56:07.000+00:00
@@ -13727,7 +13604,6 @@ components:
           watch: true
           note_count: 1
           last_seq: 5
-          status: status
       properties:
         items:
           items:
@@ -13748,51 +13624,100 @@ components:
       - offset
       - total
       title: SessionListResponse
-    SessionNote:
+    SessionMessage:
+      description: |-
+        One message of the conversation, in the OpenAI chat format most agents already keep, plus the
+        client's own `id`. Unknown keys (a name, reasoning, ...) are ignored, so a client can send the
+        messages it already has as they are.
       example:
-        created_at: 2000-01-23T04:56:07.000+00:00
+        role: user
+        tool_call_id: tool_call_id
+        tool_calls:
+        - function:
+            name: name
+            arguments: Arguments
+          id: id
+          type: function
+        - function:
+            name: name
+            arguments: Arguments
+          id: id
+          type: function
+        is_error: false
+        id: id
+        content: Content_1
+        ts: 2000-01-23T04:56:07.000+00:00
+      properties:
+        id:
+          description: "The client's id for this message, unique in the session. Sending\
+            \ it again is a no-op: an append that is retried after a lost response\
+            \ stores nothing twice."
+          maxLength: 256
+          minLength: 1
+          title: Id
+          type: string
+        role:
+          enum:
+          - user
+          - assistant
+          - tool
+          - system
+          title: Role
+          type: string
+        content:
+          $ref: '#/components/schemas/Content_1'
+        tool_calls:
+          items:
+            $ref: '#/components/schemas/ToolCall'
+          nullable: true
+          type: array
+        tool_call_id:
+          maxLength: 256
+          nullable: true
+          type: string
+        is_error:
+          default: false
+          description: "On a `tool` message: the tool failed."
+          title: Is Error
+          type: boolean
+        ts:
+          format: date-time
+          nullable: true
+          type: string
+      required:
+      - id
+      - role
+      title: SessionMessage
+    SessionNote:
+      description: |-
+        A note for the agent. What the watcher checked and the memories it used are in the session's
+        event log (the note's `note` entry and its `check`).
+      example:
         text: text
-        trigger: trigger
         source:
-          metadata:
-            key: ""
           quote: ""
           mentioned_at: 2000-01-23T04:56:07.000+00:00
           document_id: document_id
-        memory_ids:
-        - memory_ids
-        - memory_ids
-        seq: 5
+        seq: 0
       properties:
         seq:
+          description: "Its position in the log: acknowledge it by sending it back\
+            \ as `ack`."
           title: Seq
           type: integer
         text:
           title: Text
           type: string
-        trigger:
-          title: Trigger
-          type: string
-        memory_ids:
-          items:
-            type: string
-          type: array
         source:
           $ref: '#/components/schemas/SessionNoteSource'
-        created_at:
-          format: date-time
-          title: Created At
-          type: string
       required:
-      - created_at
       - seq
       - text
-      - trigger
       title: SessionNote
     SessionNoteSource:
+      description: "Where a note comes from, so the agent can check it before acting\
+        \ on it."
       example:
-        metadata:
-          key: ""
         quote: ""
         mentioned_at: 2000-01-23T04:56:07.000+00:00
         document_id: document_id
@@ -13809,9 +13734,6 @@ components:
           format: date-time
           nullable: true
           type: string
-        metadata:
-          additionalProperties: {}
-          title: Metadata
       required:
       - document_id
       title: SessionNoteSource
@@ -13826,22 +13748,12 @@ components:
         retain: turns
         context: context
         observation_scopes: per_tag
-        source: source
-        title: title
         document_id: document_id
         strategy: strategy
         tags:
         - tags
         - tags
       properties:
-        title:
-          maxLength: 1000
-          nullable: true
-          type: string
-        source:
-          maxLength: 256
-          nullable: true
-          type: string
         document_id:
           maxLength: 512
           nullable: true
@@ -13852,7 +13764,7 @@ components:
         retain:
           enum:
           - turns
-          - close
+          - idle
           - "off"
           nullable: true
           type: string
@@ -13886,9 +13798,7 @@ components:
         retain: retain
         session_id: session_id
         created_at: 2000-01-23T04:56:07.000+00:00
-        source: source
         document_id: document_id
-        title: title
         acked_seq: 7
         saved_seq: 2
         last_event_at: 2000-01-23T04:56:07.000+00:00
@@ -13897,22 +13807,12 @@ components:
         watch: true
         note_count: 1
         last_seq: 5
-        status: status
       properties:
         session_id:
           title: Session Id
           type: string
         document_id:
           title: Document Id
-          type: string
-        title:
-          nullable: true
-          type: string
-        source:
-          nullable: true
-          type: string
-        status:
-          title: Status
           type: string
         watch:
           title: Watch
@@ -13973,7 +13873,6 @@ components:
       - retain
       - saved_seq
       - session_id
-      - status
       - updated_at
       - watch
       title: SessionSummary
@@ -14321,6 +14220,47 @@ components:
           title: Thoughts Tokens
           type: integer
       title: TokenUsage
+    ToolCall:
+      example:
+        function:
+          name: name
+          arguments: Arguments
+        id: id
+        type: function
+      properties:
+        id:
+          description: Matched by the `tool` message that answers it.
+          maxLength: 256
+          minLength: 1
+          title: Id
+          type: string
+        type:
+          default: function
+          enum:
+          - function
+          title: Type
+          type: string
+        function:
+          $ref: '#/components/schemas/ToolCallFunction'
+      required:
+      - function
+      - id
+      title: ToolCall
+    ToolCallFunction:
+      example:
+        name: name
+        arguments: Arguments
+      properties:
+        name:
+          maxLength: 256
+          title: Name
+          type: string
+        arguments:
+          $ref: '#/components/schemas/Arguments'
+      required:
+      - arguments
+      - name
+      title: ToolCallFunction
     ToolCallsIncludeOptions:
       description: Options for including tool calls in reflect results.
       properties:
@@ -14998,6 +14938,16 @@ components:
       - $ref: '#/components/schemas/TagGroupAnd-Input'
       - $ref: '#/components/schemas/TagGroupOr-Input'
       - $ref: '#/components/schemas/TagGroupNot-Input'
+    Content_1:
+      anyOf:
+      - type: string
+      - items:
+          $ref: '#/components/schemas/ContentPart'
+        type: array
+      description: "What was said: a string, or a list of parts whose text parts are\
+        \ read."
+      nullable: true
+      title: Content
     Observation_Scopes_1:
       anyOf:
       - enum:
@@ -15029,6 +14979,13 @@ components:
       - $ref: '#/components/schemas/TagGroupOr-Output'
       - $ref: '#/components/schemas/TagGroupNot-Output'
       title: Not
+    Arguments:
+      anyOf:
+      - type: string
+      - additionalProperties: {}
+      description: "The tool's arguments: a JSON object, or the JSON string OpenAI\
+        \ sends."
+      title: Arguments
     UpdateDocumentObservationScopes:
       anyOf:
       - enum:

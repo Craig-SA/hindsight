@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 from typing import Any, ClassVar, Dict, List
 from hindsight_client_api.models.session_event import SessionEvent
 from typing import Optional, Set
@@ -29,9 +29,8 @@ class SessionEventsResponse(BaseModel):
     """ # noqa: E501
     items: List[SessionEvent]
     last_seq: StrictInt = Field(description="The log's last position now: poll again with `after` set to it.")
-    status: StrictStr
     checking: StrictBool
-    __properties: ClassVar[List[str]] = ["items", "last_seq", "status", "checking"]
+    __properties: ClassVar[List[str]] = ["items", "last_seq", "checking"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -93,7 +92,6 @@ class SessionEventsResponse(BaseModel):
         _obj = cls.model_validate({
             "items": [SessionEvent.from_dict(_item) for _item in obj["items"]] if obj.get("items") is not None else None,
             "last_seq": obj.get("last_seq"),
-            "status": obj.get("status"),
             "checking": obj.get("checking")
         })
         return _obj

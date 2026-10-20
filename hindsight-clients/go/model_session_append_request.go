@@ -19,7 +19,10 @@ var _ MappedNullable = &SessionAppendRequest{}
 
 // SessionAppendRequest struct for SessionAppendRequest
 type SessionAppendRequest struct {
-	Events []SessionEventIn `json:"events,omitempty"`
+	Messages []SessionMessage `json:"messages,omitempty"`
+	State map[string]interface{} `json:"state,omitempty"`
+	// The assistant finished its turn after these messages: the turn is saved into memory (with `retain: turns`). Sent again with nothing new in between, it is the same turn end.
+	TurnEnd *bool `json:"turn_end,omitempty"`
 	Ack NullableInt32 `json:"ack,omitempty"`
 	Session NullableSessionOptions `json:"session,omitempty"`
 }
@@ -30,6 +33,8 @@ type SessionAppendRequest struct {
 // will change when the set of required properties is changed
 func NewSessionAppendRequest() *SessionAppendRequest {
 	this := SessionAppendRequest{}
+	var turnEnd bool = false
+	this.TurnEnd = &turnEnd
 	return &this
 }
 
@@ -38,39 +43,106 @@ func NewSessionAppendRequest() *SessionAppendRequest {
 // but it doesn't guarantee that properties required by API are set
 func NewSessionAppendRequestWithDefaults() *SessionAppendRequest {
 	this := SessionAppendRequest{}
+	var turnEnd bool = false
+	this.TurnEnd = &turnEnd
 	return &this
 }
 
-// GetEvents returns the Events field value if set, zero value otherwise.
-func (o *SessionAppendRequest) GetEvents() []SessionEventIn {
-	if o == nil || IsNil(o.Events) {
-		var ret []SessionEventIn
+// GetMessages returns the Messages field value if set, zero value otherwise.
+func (o *SessionAppendRequest) GetMessages() []SessionMessage {
+	if o == nil || IsNil(o.Messages) {
+		var ret []SessionMessage
 		return ret
 	}
-	return o.Events
+	return o.Messages
 }
 
-// GetEventsOk returns a tuple with the Events field value if set, nil otherwise
+// GetMessagesOk returns a tuple with the Messages field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *SessionAppendRequest) GetEventsOk() ([]SessionEventIn, bool) {
-	if o == nil || IsNil(o.Events) {
+func (o *SessionAppendRequest) GetMessagesOk() ([]SessionMessage, bool) {
+	if o == nil || IsNil(o.Messages) {
 		return nil, false
 	}
-	return o.Events, true
+	return o.Messages, true
 }
 
-// HasEvents returns a boolean if a field has been set.
-func (o *SessionAppendRequest) HasEvents() bool {
-	if o != nil && !IsNil(o.Events) {
+// HasMessages returns a boolean if a field has been set.
+func (o *SessionAppendRequest) HasMessages() bool {
+	if o != nil && !IsNil(o.Messages) {
 		return true
 	}
 
 	return false
 }
 
-// SetEvents gets a reference to the given []SessionEventIn and assigns it to the Events field.
-func (o *SessionAppendRequest) SetEvents(v []SessionEventIn) {
-	o.Events = v
+// SetMessages gets a reference to the given []SessionMessage and assigns it to the Messages field.
+func (o *SessionAppendRequest) SetMessages(v []SessionMessage) {
+	o.Messages = v
+}
+
+// GetState returns the State field value if set, zero value otherwise (both if not set or set to explicit null).
+func (o *SessionAppendRequest) GetState() map[string]interface{} {
+	if o == nil {
+		var ret map[string]interface{}
+		return ret
+	}
+	return o.State
+}
+
+// GetStateOk returns a tuple with the State field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+// NOTE: If the value is an explicit nil, `nil, true` will be returned
+func (o *SessionAppendRequest) GetStateOk() (map[string]interface{}, bool) {
+	if o == nil || IsNil(o.State) {
+		return map[string]interface{}{}, false
+	}
+	return o.State, true
+}
+
+// HasState returns a boolean if a field has been set.
+func (o *SessionAppendRequest) HasState() bool {
+	if o != nil && !IsNil(o.State) {
+		return true
+	}
+
+	return false
+}
+
+// SetState gets a reference to the given map[string]interface{} and assigns it to the State field.
+func (o *SessionAppendRequest) SetState(v map[string]interface{}) {
+	o.State = v
+}
+
+// GetTurnEnd returns the TurnEnd field value if set, zero value otherwise.
+func (o *SessionAppendRequest) GetTurnEnd() bool {
+	if o == nil || IsNil(o.TurnEnd) {
+		var ret bool
+		return ret
+	}
+	return *o.TurnEnd
+}
+
+// GetTurnEndOk returns a tuple with the TurnEnd field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SessionAppendRequest) GetTurnEndOk() (*bool, bool) {
+	if o == nil || IsNil(o.TurnEnd) {
+		return nil, false
+	}
+	return o.TurnEnd, true
+}
+
+// HasTurnEnd returns a boolean if a field has been set.
+func (o *SessionAppendRequest) HasTurnEnd() bool {
+	if o != nil && !IsNil(o.TurnEnd) {
+		return true
+	}
+
+	return false
+}
+
+// SetTurnEnd gets a reference to the given bool and assigns it to the TurnEnd field.
+func (o *SessionAppendRequest) SetTurnEnd(v bool) {
+	o.TurnEnd = &v
 }
 
 // GetAck returns the Ack field value if set, zero value otherwise (both if not set or set to explicit null).
@@ -167,8 +239,14 @@ func (o SessionAppendRequest) MarshalJSON() ([]byte, error) {
 
 func (o SessionAppendRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	if !IsNil(o.Events) {
-		toSerialize["events"] = o.Events
+	if !IsNil(o.Messages) {
+		toSerialize["messages"] = o.Messages
+	}
+	if o.State != nil {
+		toSerialize["state"] = o.State
+	}
+	if !IsNil(o.TurnEnd) {
+		toSerialize["turn_end"] = o.TurnEnd
 	}
 	if o.Ack.IsSet() {
 		toSerialize["ack"] = o.Ack.Get()

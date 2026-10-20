@@ -170,132 +170,6 @@ func (a *SessionsAPIService) AppendSessionEventsExecute(r ApiAppendSessionEvents
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type ApiCloseSessionRequest struct {
-	ctx context.Context
-	ApiService *SessionsAPIService
-	bankId string
-	sessionId string
-	authorization *string
-}
-
-func (r ApiCloseSessionRequest) Authorization(authorization string) ApiCloseSessionRequest {
-	r.authorization = &authorization
-	return r
-}
-
-func (r ApiCloseSessionRequest) Execute() (*SessionSummary, *http.Response, error) {
-	return r.ApiService.CloseSessionExecute(r)
-}
-
-/*
-CloseSession Close a session
-
-Mark the session finished. A later append opens it again.
-
- @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
- @param bankId
- @param sessionId
- @return ApiCloseSessionRequest
-*/
-func (a *SessionsAPIService) CloseSession(ctx context.Context, bankId string, sessionId string) ApiCloseSessionRequest {
-	return ApiCloseSessionRequest{
-		ApiService: a,
-		ctx: ctx,
-		bankId: bankId,
-		sessionId: sessionId,
-	}
-}
-
-// Execute executes the request
-//  @return SessionSummary
-func (a *SessionsAPIService) CloseSessionExecute(r ApiCloseSessionRequest) (*SessionSummary, *http.Response, error) {
-	var (
-		localVarHTTPMethod   = http.MethodPost
-		localVarPostBody     interface{}
-		formFiles            []formFile
-		localVarReturnValue  *SessionSummary
-	)
-
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "SessionsAPIService.CloseSession")
-	if err != nil {
-		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
-	}
-
-	localVarPath := localBasePath + "/v1/default/banks/{bank_id}/sessions/{session_id}/close"
-	localVarPath = strings.Replace(localVarPath, "{"+"bank_id"+"}", url.PathEscape(parameterValueToString(r.bankId, "bankId")), -1)
-	localVarPath = strings.Replace(localVarPath, "{"+"session_id"+"}", url.PathEscape(parameterValueToString(r.sessionId, "sessionId")), -1)
-
-	localVarHeaderParams := make(map[string]string)
-	localVarQueryParams := url.Values{}
-	localVarFormParams := url.Values{}
-
-	// to determine the Content-Type header
-	localVarHTTPContentTypes := []string{}
-
-	// set Content-Type header
-	localVarHTTPContentType := selectHeaderContentType(localVarHTTPContentTypes)
-	if localVarHTTPContentType != "" {
-		localVarHeaderParams["Content-Type"] = localVarHTTPContentType
-	}
-
-	// to determine the Accept header
-	localVarHTTPHeaderAccepts := []string{"application/json"}
-
-	// set Accept header
-	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
-	if localVarHTTPHeaderAccept != "" {
-		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
-	}
-	if r.authorization != nil {
-		parameterAddToHeaderOrQuery(localVarHeaderParams, "authorization", r.authorization, "simple", "")
-	}
-	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
-	if err != nil {
-		return localVarReturnValue, nil, err
-	}
-
-	localVarHTTPResponse, err := a.client.callAPI(req)
-	if err != nil || localVarHTTPResponse == nil {
-		return localVarReturnValue, localVarHTTPResponse, err
-	}
-
-	localVarBody, err := io.ReadAll(localVarHTTPResponse.Body)
-	localVarHTTPResponse.Body.Close()
-	localVarHTTPResponse.Body = io.NopCloser(bytes.NewBuffer(localVarBody))
-	if err != nil {
-		return localVarReturnValue, localVarHTTPResponse, err
-	}
-
-	if localVarHTTPResponse.StatusCode >= 300 {
-		newErr := &GenericOpenAPIError{
-			body:  localVarBody,
-			error: localVarHTTPResponse.Status,
-		}
-		if localVarHTTPResponse.StatusCode == 422 {
-			var v HTTPValidationError
-			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
-			if err != nil {
-				newErr.error = err.Error()
-				return localVarReturnValue, localVarHTTPResponse, newErr
-			}
-					newErr.error = formatErrorMessage(localVarHTTPResponse.Status, &v)
-					newErr.model = v
-		}
-		return localVarReturnValue, localVarHTTPResponse, newErr
-	}
-
-	err = a.client.decode(&localVarReturnValue, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
-	if err != nil {
-		newErr := &GenericOpenAPIError{
-			body:  localVarBody,
-			error: err.Error(),
-		}
-		return localVarReturnValue, localVarHTTPResponse, newErr
-	}
-
-	return localVarReturnValue, localVarHTTPResponse, nil
-}
-
 type ApiDeleteSessionRequest struct {
 	ctx context.Context
 	ApiService *SessionsAPIService
@@ -707,7 +581,7 @@ type ApiListSessionsRequest struct {
 	authorization *string
 }
 
-// Case-insensitive match on the session id or title
+// Case-insensitive match on the session id
 func (r ApiListSessionsRequest) Q(q string) ApiListSessionsRequest {
 	r.q = &q
 	return r

@@ -24,9 +24,6 @@ var _ MappedNullable = &SessionSummary{}
 type SessionSummary struct {
 	SessionId string `json:"session_id"`
 	DocumentId string `json:"document_id"`
-	Title NullableString `json:"title,omitempty"`
-	Source NullableString `json:"source,omitempty"`
-	Status string `json:"status"`
 	Watch bool `json:"watch"`
 	Retain string `json:"retain"`
 	EventCount int32 `json:"event_count"`
@@ -50,11 +47,10 @@ type _SessionSummary SessionSummary
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewSessionSummary(sessionId string, documentId string, status string, watch bool, retain string, eventCount int32, checkCount int32, noteCount int32, deliveredCount int32, lastSeq int32, savedSeq int32, ackedSeq int32, checking bool, createdAt time.Time, updatedAt time.Time) *SessionSummary {
+func NewSessionSummary(sessionId string, documentId string, watch bool, retain string, eventCount int32, checkCount int32, noteCount int32, deliveredCount int32, lastSeq int32, savedSeq int32, ackedSeq int32, checking bool, createdAt time.Time, updatedAt time.Time) *SessionSummary {
 	this := SessionSummary{}
 	this.SessionId = sessionId
 	this.DocumentId = documentId
-	this.Status = status
 	this.Watch = watch
 	this.Retain = retain
 	this.EventCount = eventCount
@@ -124,114 +120,6 @@ func (o *SessionSummary) GetDocumentIdOk() (*string, bool) {
 // SetDocumentId sets field value
 func (o *SessionSummary) SetDocumentId(v string) {
 	o.DocumentId = v
-}
-
-// GetTitle returns the Title field value if set, zero value otherwise (both if not set or set to explicit null).
-func (o *SessionSummary) GetTitle() string {
-	if o == nil || IsNil(o.Title.Get()) {
-		var ret string
-		return ret
-	}
-	return *o.Title.Get()
-}
-
-// GetTitleOk returns a tuple with the Title field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-// NOTE: If the value is an explicit nil, `nil, true` will be returned
-func (o *SessionSummary) GetTitleOk() (*string, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return o.Title.Get(), o.Title.IsSet()
-}
-
-// HasTitle returns a boolean if a field has been set.
-func (o *SessionSummary) HasTitle() bool {
-	if o != nil && o.Title.IsSet() {
-		return true
-	}
-
-	return false
-}
-
-// SetTitle gets a reference to the given NullableString and assigns it to the Title field.
-func (o *SessionSummary) SetTitle(v string) {
-	o.Title.Set(&v)
-}
-// SetTitleNil sets the value for Title to be an explicit nil
-func (o *SessionSummary) SetTitleNil() {
-	o.Title.Set(nil)
-}
-
-// UnsetTitle ensures that no value is present for Title, not even an explicit nil
-func (o *SessionSummary) UnsetTitle() {
-	o.Title.Unset()
-}
-
-// GetSource returns the Source field value if set, zero value otherwise (both if not set or set to explicit null).
-func (o *SessionSummary) GetSource() string {
-	if o == nil || IsNil(o.Source.Get()) {
-		var ret string
-		return ret
-	}
-	return *o.Source.Get()
-}
-
-// GetSourceOk returns a tuple with the Source field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-// NOTE: If the value is an explicit nil, `nil, true` will be returned
-func (o *SessionSummary) GetSourceOk() (*string, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return o.Source.Get(), o.Source.IsSet()
-}
-
-// HasSource returns a boolean if a field has been set.
-func (o *SessionSummary) HasSource() bool {
-	if o != nil && o.Source.IsSet() {
-		return true
-	}
-
-	return false
-}
-
-// SetSource gets a reference to the given NullableString and assigns it to the Source field.
-func (o *SessionSummary) SetSource(v string) {
-	o.Source.Set(&v)
-}
-// SetSourceNil sets the value for Source to be an explicit nil
-func (o *SessionSummary) SetSourceNil() {
-	o.Source.Set(nil)
-}
-
-// UnsetSource ensures that no value is present for Source, not even an explicit nil
-func (o *SessionSummary) UnsetSource() {
-	o.Source.Unset()
-}
-
-// GetStatus returns the Status field value
-func (o *SessionSummary) GetStatus() string {
-	if o == nil {
-		var ret string
-		return ret
-	}
-
-	return o.Status
-}
-
-// GetStatusOk returns a tuple with the Status field value
-// and a boolean to check if the value has been set.
-func (o *SessionSummary) GetStatusOk() (*string, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.Status, true
-}
-
-// SetStatus sets field value
-func (o *SessionSummary) SetStatus(v string) {
-	o.Status = v
 }
 
 // GetWatch returns the Watch field value
@@ -608,13 +496,6 @@ func (o SessionSummary) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["session_id"] = o.SessionId
 	toSerialize["document_id"] = o.DocumentId
-	if o.Title.IsSet() {
-		toSerialize["title"] = o.Title.Get()
-	}
-	if o.Source.IsSet() {
-		toSerialize["source"] = o.Source.Get()
-	}
-	toSerialize["status"] = o.Status
 	toSerialize["watch"] = o.Watch
 	toSerialize["retain"] = o.Retain
 	toSerialize["event_count"] = o.EventCount
@@ -643,7 +524,6 @@ func (o *SessionSummary) UnmarshalJSON(data []byte) (err error) {
 	requiredProperties := []string{
 		"session_id",
 		"document_id",
-		"status",
 		"watch",
 		"retain",
 		"event_count",

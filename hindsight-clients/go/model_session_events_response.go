@@ -24,7 +24,6 @@ type SessionEventsResponse struct {
 	Items []SessionEvent `json:"items"`
 	// The log's last position now: poll again with `after` set to it.
 	LastSeq int32 `json:"last_seq"`
-	Status string `json:"status"`
 	Checking bool `json:"checking"`
 }
 
@@ -34,11 +33,10 @@ type _SessionEventsResponse SessionEventsResponse
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewSessionEventsResponse(items []SessionEvent, lastSeq int32, status string, checking bool) *SessionEventsResponse {
+func NewSessionEventsResponse(items []SessionEvent, lastSeq int32, checking bool) *SessionEventsResponse {
 	this := SessionEventsResponse{}
 	this.Items = items
 	this.LastSeq = lastSeq
-	this.Status = status
 	this.Checking = checking
 	return &this
 }
@@ -99,30 +97,6 @@ func (o *SessionEventsResponse) SetLastSeq(v int32) {
 	o.LastSeq = v
 }
 
-// GetStatus returns the Status field value
-func (o *SessionEventsResponse) GetStatus() string {
-	if o == nil {
-		var ret string
-		return ret
-	}
-
-	return o.Status
-}
-
-// GetStatusOk returns a tuple with the Status field value
-// and a boolean to check if the value has been set.
-func (o *SessionEventsResponse) GetStatusOk() (*string, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.Status, true
-}
-
-// SetStatus sets field value
-func (o *SessionEventsResponse) SetStatus(v string) {
-	o.Status = v
-}
-
 // GetChecking returns the Checking field value
 func (o *SessionEventsResponse) GetChecking() bool {
 	if o == nil {
@@ -159,7 +133,6 @@ func (o SessionEventsResponse) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["items"] = o.Items
 	toSerialize["last_seq"] = o.LastSeq
-	toSerialize["status"] = o.Status
 	toSerialize["checking"] = o.Checking
 	return toSerialize, nil
 }
@@ -171,7 +144,6 @@ func (o *SessionEventsResponse) UnmarshalJSON(data []byte) (err error) {
 	requiredProperties := []string{
 		"items",
 		"last_seq",
-		"status",
 		"checking",
 	}
 

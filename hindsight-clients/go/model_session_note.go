@@ -12,7 +12,6 @@ package hindsight
 
 import (
 	"encoding/json"
-	"time"
 	"bytes"
 	"fmt"
 )
@@ -20,14 +19,12 @@ import (
 // checks if the SessionNote type satisfies the MappedNullable interface at compile time
 var _ MappedNullable = &SessionNote{}
 
-// SessionNote struct for SessionNote
+// SessionNote A note for the agent. What the watcher checked and the memories it used are in the session's event log (the note's `note` entry and its `check`).
 type SessionNote struct {
+	// Its position in the log: acknowledge it by sending it back as `ack`.
 	Seq int32 `json:"seq"`
 	Text string `json:"text"`
-	Trigger string `json:"trigger"`
-	MemoryIds []string `json:"memory_ids,omitempty"`
 	Source NullableSessionNoteSource `json:"source,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
 }
 
 type _SessionNote SessionNote
@@ -36,12 +33,10 @@ type _SessionNote SessionNote
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewSessionNote(seq int32, text string, trigger string, createdAt time.Time) *SessionNote {
+func NewSessionNote(seq int32, text string) *SessionNote {
 	this := SessionNote{}
 	this.Seq = seq
 	this.Text = text
-	this.Trigger = trigger
-	this.CreatedAt = createdAt
 	return &this
 }
 
@@ -101,62 +96,6 @@ func (o *SessionNote) SetText(v string) {
 	o.Text = v
 }
 
-// GetTrigger returns the Trigger field value
-func (o *SessionNote) GetTrigger() string {
-	if o == nil {
-		var ret string
-		return ret
-	}
-
-	return o.Trigger
-}
-
-// GetTriggerOk returns a tuple with the Trigger field value
-// and a boolean to check if the value has been set.
-func (o *SessionNote) GetTriggerOk() (*string, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.Trigger, true
-}
-
-// SetTrigger sets field value
-func (o *SessionNote) SetTrigger(v string) {
-	o.Trigger = v
-}
-
-// GetMemoryIds returns the MemoryIds field value if set, zero value otherwise.
-func (o *SessionNote) GetMemoryIds() []string {
-	if o == nil || IsNil(o.MemoryIds) {
-		var ret []string
-		return ret
-	}
-	return o.MemoryIds
-}
-
-// GetMemoryIdsOk returns a tuple with the MemoryIds field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *SessionNote) GetMemoryIdsOk() ([]string, bool) {
-	if o == nil || IsNil(o.MemoryIds) {
-		return nil, false
-	}
-	return o.MemoryIds, true
-}
-
-// HasMemoryIds returns a boolean if a field has been set.
-func (o *SessionNote) HasMemoryIds() bool {
-	if o != nil && !IsNil(o.MemoryIds) {
-		return true
-	}
-
-	return false
-}
-
-// SetMemoryIds gets a reference to the given []string and assigns it to the MemoryIds field.
-func (o *SessionNote) SetMemoryIds(v []string) {
-	o.MemoryIds = v
-}
-
 // GetSource returns the Source field value if set, zero value otherwise (both if not set or set to explicit null).
 func (o *SessionNote) GetSource() SessionNoteSource {
 	if o == nil || IsNil(o.Source.Get()) {
@@ -199,30 +138,6 @@ func (o *SessionNote) UnsetSource() {
 	o.Source.Unset()
 }
 
-// GetCreatedAt returns the CreatedAt field value
-func (o *SessionNote) GetCreatedAt() time.Time {
-	if o == nil {
-		var ret time.Time
-		return ret
-	}
-
-	return o.CreatedAt
-}
-
-// GetCreatedAtOk returns a tuple with the CreatedAt field value
-// and a boolean to check if the value has been set.
-func (o *SessionNote) GetCreatedAtOk() (*time.Time, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.CreatedAt, true
-}
-
-// SetCreatedAt sets field value
-func (o *SessionNote) SetCreatedAt(v time.Time) {
-	o.CreatedAt = v
-}
-
 func (o SessionNote) MarshalJSON() ([]byte, error) {
 	toSerialize,err := o.ToMap()
 	if err != nil {
@@ -235,14 +150,9 @@ func (o SessionNote) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["seq"] = o.Seq
 	toSerialize["text"] = o.Text
-	toSerialize["trigger"] = o.Trigger
-	if !IsNil(o.MemoryIds) {
-		toSerialize["memory_ids"] = o.MemoryIds
-	}
 	if o.Source.IsSet() {
 		toSerialize["source"] = o.Source.Get()
 	}
-	toSerialize["created_at"] = o.CreatedAt
 	return toSerialize, nil
 }
 
@@ -253,8 +163,6 @@ func (o *SessionNote) UnmarshalJSON(data []byte) (err error) {
 	requiredProperties := []string{
 		"seq",
 		"text",
-		"trigger",
-		"created_at",
 	}
 
 	allProperties := make(map[string]interface{})

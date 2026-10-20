@@ -28,8 +28,6 @@ class SessionOptions(BaseModel):
     """
     How the session is set up. Applied when an append creates the session; later appends that carry options update the fields they set.
     """ # noqa: E501
-    title: Optional[Annotated[str, Field(strict=True, max_length=1000)]] = None
-    source: Optional[Annotated[str, Field(strict=True, max_length=256)]] = None
     document_id: Optional[Annotated[str, Field(strict=True, max_length=512)]] = None
     watch: Optional[StrictBool] = None
     retain: Optional[StrictStr] = None
@@ -38,7 +36,7 @@ class SessionOptions(BaseModel):
     strategy: Optional[Annotated[str, Field(strict=True, max_length=256)]] = None
     observation_scopes: Optional[ObservationScopes1] = None
     metadata: Optional[Dict[str, StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["title", "source", "document_id", "watch", "retain", "tags", "context", "strategy", "observation_scopes", "metadata"]
+    __properties: ClassVar[List[str]] = ["document_id", "watch", "retain", "tags", "context", "strategy", "observation_scopes", "metadata"]
 
     @field_validator('retain')
     def retain_validate_enum(cls, value):
@@ -46,8 +44,8 @@ class SessionOptions(BaseModel):
         if value is None:
             return value
 
-        if value not in set(['turns', 'close', 'off']):
-            raise ValueError("must be one of enum values ('turns', 'close', 'off')")
+        if value not in set(['turns', 'idle', 'off']):
+            raise ValueError("must be one of enum values ('turns', 'idle', 'off')")
         return value
 
     model_config = ConfigDict(
@@ -92,16 +90,6 @@ class SessionOptions(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of observation_scopes
         if self.observation_scopes:
             _dict['observation_scopes'] = self.observation_scopes.to_dict()
-        # set to None if title (nullable) is None
-        # and model_fields_set contains the field
-        if self.title is None and "title" in self.model_fields_set:
-            _dict['title'] = None
-
-        # set to None if source (nullable) is None
-        # and model_fields_set contains the field
-        if self.source is None and "source" in self.model_fields_set:
-            _dict['source'] = None
-
         # set to None if document_id (nullable) is None
         # and model_fields_set contains the field
         if self.document_id is None and "document_id" in self.model_fields_set:
@@ -154,8 +142,6 @@ class SessionOptions(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "title": obj.get("title"),
-            "source": obj.get("source"),
             "document_id": obj.get("document_id"),
             "watch": obj.get("watch"),
             "retain": obj.get("retain"),

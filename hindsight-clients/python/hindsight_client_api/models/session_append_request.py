@@ -17,10 +17,10 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
-from hindsight_client_api.models.session_event_in import SessionEventIn
+from hindsight_client_api.models.session_message import SessionMessage
 from hindsight_client_api.models.session_options import SessionOptions
 from typing import Optional, Set
 from typing_extensions import Self
@@ -29,10 +29,12 @@ class SessionAppendRequest(BaseModel):
     """
     SessionAppendRequest
     """ # noqa: E501
-    events: Optional[Annotated[List[SessionEventIn], Field(max_length=500)]] = None
+    messages: Optional[Annotated[List[SessionMessage], Field(max_length=500)]] = None
+    state: Optional[Dict[str, Any]] = None
+    turn_end: Optional[StrictBool] = Field(default=False, description="The assistant finished its turn after these messages: the turn is saved into memory (with `retain: turns`). Sent again with nothing new in between, it is the same turn end.")
     ack: Optional[Annotated[int, Field(strict=True, ge=0)]] = None
     session: Optional[SessionOptions] = None
-    __properties: ClassVar[List[str]] = ["events", "ack", "session"]
+    __properties: ClassVar[List[str]] = ["messages", "state", "turn_end", "ack", "session"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -73,16 +75,21 @@ class SessionAppendRequest(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of each item in events (list)
+        # override the default output from pydantic by calling `to_dict()` of each item in messages (list)
         _items = []
-        if self.events:
-            for _item_events in self.events:
-                if _item_events:
-                    _items.append(_item_events.to_dict())
-            _dict['events'] = _items
+        if self.messages:
+            for _item_messages in self.messages:
+                if _item_messages:
+                    _items.append(_item_messages.to_dict())
+            _dict['messages'] = _items
         # override the default output from pydantic by calling `to_dict()` of session
         if self.session:
             _dict['session'] = self.session.to_dict()
+        # set to None if state (nullable) is None
+        # and model_fields_set contains the field
+        if self.state is None and "state" in self.model_fields_set:
+            _dict['state'] = None
+
         # set to None if ack (nullable) is None
         # and model_fields_set contains the field
         if self.ack is None and "ack" in self.model_fields_set:
@@ -105,7 +112,9 @@ class SessionAppendRequest(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "events": [SessionEventIn.from_dict(_item) for _item in obj["events"]] if obj.get("events") is not None else None,
+            "messages": [SessionMessage.from_dict(_item) for _item in obj["messages"]] if obj.get("messages") is not None else None,
+            "state": obj.get("state"),
+            "turn_end": obj.get("turn_end") if obj.get("turn_end") is not None else False,
             "ack": obj.get("ack"),
             "session": SessionOptions.from_dict(obj["session"]) if obj.get("session") is not None else None
         })

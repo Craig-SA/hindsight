@@ -48,6 +48,7 @@ from hindsight_client_api.exceptions import ApiException
 
 # import models into sdk package
 from hindsight_client_api.models.add_background_request import AddBackgroundRequest
+from hindsight_client_api.models.arguments import Arguments
 from hindsight_client_api.models.async_operation_submit_response import AsyncOperationSubmitResponse
 from hindsight_client_api.models.audit_log_entry import AuditLogEntry
 from hindsight_client_api.models.audit_log_list_response import AuditLogListResponse
@@ -86,7 +87,9 @@ from hindsight_client_api.models.consolidation_strategies_preview import Consoli
 from hindsight_client_api.models.consolidation_strategies_preview_request import ConsolidationStrategiesPreviewRequest
 from hindsight_client_api.models.consolidation_strategy_spec import ConsolidationStrategySpec
 from hindsight_client_api.models.content import Content
+from hindsight_client_api.models.content1 import Content1
 from hindsight_client_api.models.content_any_of_inner import ContentAnyOfInner
+from hindsight_client_api.models.content_part import ContentPart
 from hindsight_client_api.models.create_bank_alias_request import CreateBankAliasRequest
 from hindsight_client_api.models.create_bank_request import CreateBankRequest
 from hindsight_client_api.models.create_directive_request import CreateDirectiveRequest
@@ -223,9 +226,9 @@ from hindsight_client_api.models.run_setting_model import RunSettingModel
 from hindsight_client_api.models.session_append_request import SessionAppendRequest
 from hindsight_client_api.models.session_append_response import SessionAppendResponse
 from hindsight_client_api.models.session_event import SessionEvent
-from hindsight_client_api.models.session_event_in import SessionEventIn
 from hindsight_client_api.models.session_events_response import SessionEventsResponse
 from hindsight_client_api.models.session_list_response import SessionListResponse
+from hindsight_client_api.models.session_message import SessionMessage
 from hindsight_client_api.models.session_note import SessionNote
 from hindsight_client_api.models.session_note_source import SessionNoteSource
 from hindsight_client_api.models.session_options import SessionOptions
@@ -247,6 +250,8 @@ from hindsight_client_api.models.temporal_window import TemporalWindow
 from hindsight_client_api.models.text_content_block import TextContentBlock
 from hindsight_client_api.models.timestamp import Timestamp
 from hindsight_client_api.models.token_usage import TokenUsage
+from hindsight_client_api.models.tool_call import ToolCall
+from hindsight_client_api.models.tool_call_function import ToolCallFunction
 from hindsight_client_api.models.tool_calls_include_options import ToolCallsIncludeOptions
 from hindsight_client_api.models.update_directive_request import UpdateDirectiveRequest
 from hindsight_client_api.models.update_disposition_request import UpdateDispositionRequest

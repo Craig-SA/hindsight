@@ -35,9 +35,6 @@ import type {
   CloneBankData,
   CloneBankErrors,
   CloneBankResponses,
-  CloseSessionData,
-  CloseSessionErrors,
-  CloseSessionResponses,
   CreateBankAliasData,
   CreateBankAliasErrors,
   CreateBankAliasResponses,
@@ -1126,19 +1123,6 @@ export const getSession = <ThrowOnError extends boolean = false>(
 ) =>
   (options.client ?? client).get<GetSessionResponses, GetSessionErrors, ThrowOnError>({
     url: "/v1/default/banks/{bank_id}/sessions/{session_id}",
-    ...options,
-  });
-
-/**
- * Close a session
- *
- * Mark the session finished. A later append opens it again.
- */
-export const closeSession = <ThrowOnError extends boolean = false>(
-  options: Options<CloseSessionData, ThrowOnError>
-) =>
-  (options.client ?? client).post<CloseSessionResponses, CloseSessionErrors, ThrowOnError>({
-    url: "/v1/default/banks/{bank_id}/sessions/{session_id}/close",
     ...options,
   });
 

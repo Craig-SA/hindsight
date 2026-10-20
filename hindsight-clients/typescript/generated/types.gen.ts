@@ -1547,6 +1547,22 @@ export type Content =
     >;
 
 /**
+ * ContentPart
+ *
+ * A part of a message's content, as in the OpenAI format. Only text parts are read.
+ */
+export type ContentPart = {
+  /**
+   * Type
+   */
+  type: string;
+  /**
+   * Text
+   */
+  text?: string | null;
+};
+
+/**
  * CreateBankAliasRequest
  *
  * Request model for adding an alias to a bank.
@@ -6569,9 +6585,23 @@ export type RunSettingModel = {
  */
 export type SessionAppendRequest = {
   /**
-   * Events
+   * Messages
    */
-  events?: Array<SessionEventIn>;
+  messages?: Array<SessionMessage>;
+  /**
+   * State
+   *
+   * A snapshot of the work after these messages, said by no one: for a coding agent `{"diff": "..."}`, the `git diff` of everything it changed so far. The watcher judges an edit against it. Never saved into memory.
+   */
+  state?: {
+    [key: string]: unknown;
+  } | null;
+  /**
+   * Turn End
+   *
+   * The assistant finished its turn after these messages: the turn is saved into memory (with `retain: turns`). Sent again with nothing new in between, it is the same turn end.
+   */
+  turn_end?: boolean;
   /**
    * Ack
    *
@@ -6585,28 +6615,6 @@ export type SessionAppendRequest = {
  * SessionAppendResponse
  */
 export type SessionAppendResponse = {
-  /**
-   * Session Id
-   */
-  session_id: string;
-  /**
-   * Accepted
-   *
-   * Events stored by this append.
-   */
-  accepted: number;
-  /**
-   * Duplicates
-   *
-   * Events already stored, by their id.
-   */
-  duplicates: number;
-  /**
-   * Last Seq
-   *
-   * The session log's last position.
-   */
-  last_seq: number;
   /**
    * Notes
    *
@@ -6660,66 +6668,6 @@ export type SessionEvent = {
 };
 
 /**
- * SessionEventIn
- *
- * One thing that happened in the conversation, as the client saw it.
- */
-export type SessionEventIn = {
-  /**
-   * Id
-   *
-   * The client's id for this event, unique in the session. Sending it again is a no-op: an append that is retried after a lost response stores nothing twice.
-   */
-  id: string;
-  /**
-   * Role
-   *
-   * Who it came from: the user, the assistant, a tool, or the system.
-   */
-  role: "user" | "assistant" | "tool" | "system";
-  /**
-   * Kind
-   *
-   * `message`: something said. `tool_call`: the assistant calling a tool (`tool`, `input`, `call_id`). `tool_result`: what the tool returned (`call_id`, `text`, `is_error`). `state`: a snapshot of the work, not said by anyone (`data`, e.g. `{diff}` for a coding agent's change so far). `turn_end`: the assistant finished its turn.
-   */
-  kind?: "message" | "tool_call" | "tool_result" | "state" | "turn_end";
-  /**
-   * Text
-   */
-  text?: string | null;
-  /**
-   * Tool
-   */
-  tool?: string | null;
-  /**
-   * Call Id
-   */
-  call_id?: string | null;
-  /**
-   * Input
-   */
-  input?: {
-    [key: string]: unknown;
-  } | null;
-  /**
-   * Is Error
-   */
-  is_error?: boolean;
-  /**
-   * Data
-   */
-  data?: {
-    [key: string]: unknown;
-  } | null;
-  /**
-   * Ts
-   *
-   * When it happened, by the client's clock.
-   */
-  ts?: string | null;
-};
-
-/**
  * SessionEventsResponse
  */
 export type SessionEventsResponse = {
@@ -6733,10 +6681,6 @@ export type SessionEventsResponse = {
    * The log's last position now: poll again with `after` set to it.
    */
   last_seq: number;
-  /**
-   * Status
-   */
-  status: string;
   /**
    * Checking
    */
@@ -6766,34 +6710,79 @@ export type SessionListResponse = {
 };
 
 /**
+ * SessionMessage
+ *
+ * One message of the conversation, in the OpenAI chat format most agents already keep, plus the
+ * client's own `id`. Unknown keys (a name, reasoning, ...) are ignored, so a client can send the
+ * messages it already has as they are.
+ */
+export type SessionMessage = {
+  /**
+   * Id
+   *
+   * The client's id for this message, unique in the session. Sending it again is a no-op: an append that is retried after a lost response stores nothing twice.
+   */
+  id: string;
+  /**
+   * Role
+   */
+  role: "user" | "assistant" | "tool" | "system";
+  /**
+   * Content
+   *
+   * What was said: a string, or a list of parts whose text parts are read.
+   */
+  content?: string | Array<ContentPart> | null;
+  /**
+   * Tool Calls
+   *
+   * The tools an assistant message calls.
+   */
+  tool_calls?: Array<ToolCall> | null;
+  /**
+   * Tool Call Id
+   *
+   * On a `tool` message: the call it answers.
+   */
+  tool_call_id?: string | null;
+  /**
+   * Is Error
+   *
+   * On a `tool` message: the tool failed.
+   */
+  is_error?: boolean;
+  /**
+   * Ts
+   *
+   * When it happened, by the client's clock.
+   */
+  ts?: string | null;
+};
+
+/**
  * SessionNote
+ *
+ * A note for the agent. What the watcher checked and the memories it used are in the session's
+ * event log (the note's `note` entry and its `check`).
  */
 export type SessionNote = {
   /**
    * Seq
+   *
+   * Its position in the log: acknowledge it by sending it back as `ack`.
    */
   seq: number;
   /**
    * Text
    */
   text: string;
-  /**
-   * Trigger
-   */
-  trigger: string;
-  /**
-   * Memory Ids
-   */
-  memory_ids?: Array<string>;
   source?: SessionNoteSource | null;
-  /**
-   * Created At
-   */
-  created_at: string;
 };
 
 /**
  * SessionNoteSource
+ *
+ * Where a note comes from, so the agent can check it before acting on it.
  */
 export type SessionNoteSource = {
   /**
@@ -6810,12 +6799,6 @@ export type SessionNoteSource = {
    * Mentioned At
    */
   mentioned_at?: string | null;
-  /**
-   * Metadata
-   */
-  metadata?: {
-    [key: string]: unknown;
-  };
 };
 
 /**
@@ -6825,16 +6808,6 @@ export type SessionNoteSource = {
  * carry options update the fields they set.
  */
 export type SessionOptions = {
-  /**
-   * Title
-   */
-  title?: string | null;
-  /**
-   * Source
-   *
-   * What is sending the session, e.g. `claude-code`.
-   */
-  source?: string | null;
   /**
    * Document Id
    *
@@ -6850,9 +6823,9 @@ export type SessionOptions = {
   /**
    * Retain
    *
-   * When the conversation is saved into its document: at the end of each turn (`turns`, the default), only when the session closes (`close`), or never (`off`).
+   * When the conversation is saved into its document: at the end of each turn and when the session goes idle (`turns`, the default), only when the session goes idle (`idle`: one extraction for the whole session), or never (`off`).
    */
-  retain?: "turns" | "close" | "off" | null;
+  retain?: "turns" | "idle" | "off" | null;
   /**
    * Tags
    *
@@ -6885,6 +6858,8 @@ export type SessionOptions = {
     | null;
   /**
    * Metadata
+   *
+   * Free-form labels, merged across appends and copied onto the saved document. `harness` names the client (e.g. `claude-code`): the UI shows its logo.
    */
   metadata?: {
     [key: string]: string;
@@ -6903,18 +6878,6 @@ export type SessionSummary = {
    * Document Id
    */
   document_id: string;
-  /**
-   * Title
-   */
-  title?: string | null;
-  /**
-   * Source
-   */
-  source?: string | null;
-  /**
-   * Status
-   */
-  status: string;
   /**
    * Watch
    */
@@ -7298,6 +7261,43 @@ export type TokenUsage = {
    * Reasoning/thinking tokens generated by the model. Billed at the output rate by some providers (e.g. Gemini 2.5+ family) but not surfaced in the visible response.
    */
   thoughts_tokens?: number;
+};
+
+/**
+ * ToolCall
+ */
+export type ToolCall = {
+  /**
+   * Id
+   *
+   * Matched by the `tool` message that answers it.
+   */
+  id: string;
+  /**
+   * Type
+   */
+  type?: "function";
+  function: ToolCallFunction;
+};
+
+/**
+ * ToolCallFunction
+ */
+export type ToolCallFunction = {
+  /**
+   * Name
+   */
+  name: string;
+  /**
+   * Arguments
+   *
+   * The tool's arguments: a JSON object, or the JSON string OpenAI sends.
+   */
+  arguments:
+    | string
+    | {
+        [key: string]: unknown;
+      };
 };
 
 /**
@@ -9996,7 +9996,7 @@ export type ListSessionsData = {
     /**
      * Q
      *
-     * Case-insensitive match on the session id or title
+     * Case-insensitive match on the session id
      */
     q?: string | null;
     /**
@@ -10108,46 +10108,6 @@ export type GetSessionResponses = {
 };
 
 export type GetSessionResponse = GetSessionResponses[keyof GetSessionResponses];
-
-export type CloseSessionData = {
-  body?: never;
-  headers?: {
-    /**
-     * Authorization
-     */
-    authorization?: string | null;
-  };
-  path: {
-    /**
-     * Bank Id
-     */
-    bank_id: string;
-    /**
-     * Session Id
-     */
-    session_id: string;
-  };
-  query?: never;
-  url: "/v1/default/banks/{bank_id}/sessions/{session_id}/close";
-};
-
-export type CloseSessionErrors = {
-  /**
-   * Validation Error
-   */
-  422: HttpValidationError;
-};
-
-export type CloseSessionError = CloseSessionErrors[keyof CloseSessionErrors];
-
-export type CloseSessionResponses = {
-  /**
-   * Successful Response
-   */
-  200: SessionSummary;
-};
-
-export type CloseSessionResponse = CloseSessionResponses[keyof CloseSessionResponses];
 
 export type GetDocumentHistoryData = {
   body?: never;

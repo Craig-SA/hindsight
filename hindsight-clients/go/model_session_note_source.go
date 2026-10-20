@@ -20,13 +20,12 @@ import (
 // checks if the SessionNoteSource type satisfies the MappedNullable interface at compile time
 var _ MappedNullable = &SessionNoteSource{}
 
-// SessionNoteSource struct for SessionNoteSource
+// SessionNoteSource Where a note comes from, so the agent can check it before acting on it.
 type SessionNoteSource struct {
 	DocumentId string `json:"document_id"`
 	// The source's own sentence closest to the note, verbatim.
 	Quote *string `json:"quote,omitempty"`
 	MentionedAt NullableTime `json:"mentioned_at,omitempty"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
 type _SessionNoteSource SessionNoteSource
@@ -151,38 +150,6 @@ func (o *SessionNoteSource) UnsetMentionedAt() {
 	o.MentionedAt.Unset()
 }
 
-// GetMetadata returns the Metadata field value if set, zero value otherwise.
-func (o *SessionNoteSource) GetMetadata() map[string]interface{} {
-	if o == nil || IsNil(o.Metadata) {
-		var ret map[string]interface{}
-		return ret
-	}
-	return o.Metadata
-}
-
-// GetMetadataOk returns a tuple with the Metadata field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *SessionNoteSource) GetMetadataOk() (map[string]interface{}, bool) {
-	if o == nil || IsNil(o.Metadata) {
-		return map[string]interface{}{}, false
-	}
-	return o.Metadata, true
-}
-
-// HasMetadata returns a boolean if a field has been set.
-func (o *SessionNoteSource) HasMetadata() bool {
-	if o != nil && !IsNil(o.Metadata) {
-		return true
-	}
-
-	return false
-}
-
-// SetMetadata gets a reference to the given map[string]interface{} and assigns it to the Metadata field.
-func (o *SessionNoteSource) SetMetadata(v map[string]interface{}) {
-	o.Metadata = v
-}
-
 func (o SessionNoteSource) MarshalJSON() ([]byte, error) {
 	toSerialize,err := o.ToMap()
 	if err != nil {
@@ -199,9 +166,6 @@ func (o SessionNoteSource) ToMap() (map[string]interface{}, error) {
 	}
 	if o.MentionedAt.IsSet() {
 		toSerialize["mentioned_at"] = o.MentionedAt.Get()
-	}
-	if !IsNil(o.Metadata) {
-		toSerialize["metadata"] = o.Metadata
 	}
 	return toSerialize, nil
 }

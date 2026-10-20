@@ -29,9 +29,6 @@ class SessionSummary(BaseModel):
     """ # noqa: E501
     session_id: StrictStr
     document_id: StrictStr
-    title: Optional[StrictStr] = None
-    source: Optional[StrictStr] = None
-    status: StrictStr
     watch: StrictBool
     retain: StrictStr
     event_count: StrictInt
@@ -46,7 +43,7 @@ class SessionSummary(BaseModel):
     updated_at: datetime
     last_event_at: Optional[datetime] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["session_id", "document_id", "title", "source", "status", "watch", "retain", "event_count", "check_count", "note_count", "delivered_count", "last_seq", "saved_seq", "acked_seq", "checking", "created_at", "updated_at", "last_event_at", "metadata"]
+    __properties: ClassVar[List[str]] = ["session_id", "document_id", "watch", "retain", "event_count", "check_count", "note_count", "delivered_count", "last_seq", "saved_seq", "acked_seq", "checking", "created_at", "updated_at", "last_event_at", "metadata"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -87,16 +84,6 @@ class SessionSummary(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if title (nullable) is None
-        # and model_fields_set contains the field
-        if self.title is None and "title" in self.model_fields_set:
-            _dict['title'] = None
-
-        # set to None if source (nullable) is None
-        # and model_fields_set contains the field
-        if self.source is None and "source" in self.model_fields_set:
-            _dict['source'] = None
-
         # set to None if last_event_at (nullable) is None
         # and model_fields_set contains the field
         if self.last_event_at is None and "last_event_at" in self.model_fields_set:
@@ -116,9 +103,6 @@ class SessionSummary(BaseModel):
         _obj = cls.model_validate({
             "session_id": obj.get("session_id"),
             "document_id": obj.get("document_id"),
-            "title": obj.get("title"),
-            "source": obj.get("source"),
-            "status": obj.get("status"),
             "watch": obj.get("watch"),
             "retain": obj.get("retain"),
             "event_count": obj.get("event_count"),

@@ -17,8 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from hindsight_client_api.models.session_note_source import SessionNoteSource
 from typing import Optional, Set
@@ -26,15 +25,12 @@ from typing_extensions import Self
 
 class SessionNote(BaseModel):
     """
-    SessionNote
+    A note for the agent. What the watcher checked and the memories it used are in the session's event log (the note's `note` entry and its `check`).
     """ # noqa: E501
-    seq: StrictInt
+    seq: StrictInt = Field(description="Its position in the log: acknowledge it by sending it back as `ack`.")
     text: StrictStr
-    trigger: StrictStr
-    memory_ids: Optional[List[StrictStr]] = None
     source: Optional[SessionNoteSource] = None
-    created_at: datetime
-    __properties: ClassVar[List[str]] = ["seq", "text", "trigger", "memory_ids", "source", "created_at"]
+    __properties: ClassVar[List[str]] = ["seq", "text", "source"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -97,10 +93,7 @@ class SessionNote(BaseModel):
         _obj = cls.model_validate({
             "seq": obj.get("seq"),
             "text": obj.get("text"),
-            "trigger": obj.get("trigger"),
-            "memory_ids": obj.get("memory_ids"),
-            "source": SessionNoteSource.from_dict(obj["source"]) if obj.get("source") is not None else None,
-            "created_at": obj.get("created_at")
+            "source": SessionNoteSource.from_dict(obj["source"]) if obj.get("source") is not None else None
         })
         return _obj
 

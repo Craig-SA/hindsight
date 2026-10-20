@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from typing import Any, ClassVar, Dict, List
 from hindsight_client_api.models.session_note import SessionNote
 from typing import Optional, Set
@@ -27,13 +27,9 @@ class SessionAppendResponse(BaseModel):
     """
     SessionAppendResponse
     """ # noqa: E501
-    session_id: StrictStr
-    accepted: StrictInt = Field(description="Events stored by this append.")
-    duplicates: StrictInt = Field(description="Events already stored, by their id.")
-    last_seq: StrictInt = Field(description="The session log's last position.")
     notes: List[SessionNote] = Field(description="Notes after `ack`, oldest first.")
     checking: StrictBool = Field(description="A watcher check is queued or running: another note may still come.")
-    __properties: ClassVar[List[str]] = ["session_id", "accepted", "duplicates", "last_seq", "notes", "checking"]
+    __properties: ClassVar[List[str]] = ["notes", "checking"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -93,10 +89,6 @@ class SessionAppendResponse(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "session_id": obj.get("session_id"),
-            "accepted": obj.get("accepted"),
-            "duplicates": obj.get("duplicates"),
-            "last_seq": obj.get("last_seq"),
             "notes": [SessionNote.from_dict(_item) for _item in obj["notes"]] if obj.get("notes") is not None else None,
             "checking": obj.get("checking")
         })

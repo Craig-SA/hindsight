@@ -21,40 +21,29 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
+from hindsight_client_api.models.content1 import Content1
+from hindsight_client_api.models.tool_call import ToolCall
 from typing import Optional, Set
 from typing_extensions import Self
 
-class SessionEventIn(BaseModel):
+class SessionMessage(BaseModel):
     """
-    One thing that happened in the conversation, as the client saw it.
+    One message of the conversation, in the OpenAI chat format most agents already keep, plus the client's own `id`. Unknown keys (a name, reasoning, ...) are ignored, so a client can send the messages it already has as they are.
     """ # noqa: E501
-    id: Annotated[str, Field(min_length=1, strict=True, max_length=256)] = Field(description="The client's id for this event, unique in the session. Sending it again is a no-op: an append that is retried after a lost response stores nothing twice.")
-    role: StrictStr = Field(description="Who it came from: the user, the assistant, a tool, or the system.")
-    kind: Optional[StrictStr] = Field(default='message', description="`message`: something said. `tool_call`: the assistant calling a tool (`tool`, `input`, `call_id`). `tool_result`: what the tool returned (`call_id`, `text`, `is_error`). `state`: a snapshot of the work, not said by anyone (`data`, e.g. `{diff}` for a coding agent's change so far). `turn_end`: the assistant finished its turn.")
-    text: Optional[Annotated[str, Field(strict=True, max_length=100000)]] = None
-    tool: Optional[Annotated[str, Field(strict=True, max_length=256)]] = None
-    call_id: Optional[Annotated[str, Field(strict=True, max_length=256)]] = None
-    input: Optional[Dict[str, Any]] = None
-    is_error: Optional[StrictBool] = False
-    data: Optional[Dict[str, Any]] = None
+    id: Annotated[str, Field(min_length=1, strict=True, max_length=256)] = Field(description="The client's id for this message, unique in the session. Sending it again is a no-op: an append that is retried after a lost response stores nothing twice.")
+    role: StrictStr
+    content: Optional[Content1] = None
+    tool_calls: Optional[List[ToolCall]] = None
+    tool_call_id: Optional[Annotated[str, Field(strict=True, max_length=256)]] = None
+    is_error: Optional[StrictBool] = Field(default=False, description="On a `tool` message: the tool failed.")
     ts: Optional[datetime] = None
-    __properties: ClassVar[List[str]] = ["id", "role", "kind", "text", "tool", "call_id", "input", "is_error", "data", "ts"]
+    __properties: ClassVar[List[str]] = ["id", "role", "content", "tool_calls", "tool_call_id", "is_error", "ts"]
 
     @field_validator('role')
     def role_validate_enum(cls, value):
         """Validates the enum"""
         if value not in set(['user', 'assistant', 'tool', 'system']):
             raise ValueError("must be one of enum values ('user', 'assistant', 'tool', 'system')")
-        return value
-
-    @field_validator('kind')
-    def kind_validate_enum(cls, value):
-        """Validates the enum"""
-        if value is None:
-            return value
-
-        if value not in set(['message', 'tool_call', 'tool_result', 'state', 'turn_end']):
-            raise ValueError("must be one of enum values ('message', 'tool_call', 'tool_result', 'state', 'turn_end')")
         return value
 
     model_config = ConfigDict(
@@ -75,7 +64,7 @@ class SessionEventIn(BaseModel):
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
-        """Create an instance of SessionEventIn from a JSON string"""
+        """Create an instance of SessionMessage from a JSON string"""
         return cls.from_dict(json.loads(json_str))
 
     def to_dict(self) -> Dict[str, Any]:
@@ -96,30 +85,30 @@ class SessionEventIn(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if text (nullable) is None
+        # override the default output from pydantic by calling `to_dict()` of content
+        if self.content:
+            _dict['content'] = self.content.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of each item in tool_calls (list)
+        _items = []
+        if self.tool_calls:
+            for _item_tool_calls in self.tool_calls:
+                if _item_tool_calls:
+                    _items.append(_item_tool_calls.to_dict())
+            _dict['tool_calls'] = _items
+        # set to None if content (nullable) is None
         # and model_fields_set contains the field
-        if self.text is None and "text" in self.model_fields_set:
-            _dict['text'] = None
+        if self.content is None and "content" in self.model_fields_set:
+            _dict['content'] = None
 
-        # set to None if tool (nullable) is None
+        # set to None if tool_calls (nullable) is None
         # and model_fields_set contains the field
-        if self.tool is None and "tool" in self.model_fields_set:
-            _dict['tool'] = None
+        if self.tool_calls is None and "tool_calls" in self.model_fields_set:
+            _dict['tool_calls'] = None
 
-        # set to None if call_id (nullable) is None
+        # set to None if tool_call_id (nullable) is None
         # and model_fields_set contains the field
-        if self.call_id is None and "call_id" in self.model_fields_set:
-            _dict['call_id'] = None
-
-        # set to None if input (nullable) is None
-        # and model_fields_set contains the field
-        if self.input is None and "input" in self.model_fields_set:
-            _dict['input'] = None
-
-        # set to None if data (nullable) is None
-        # and model_fields_set contains the field
-        if self.data is None and "data" in self.model_fields_set:
-            _dict['data'] = None
+        if self.tool_call_id is None and "tool_call_id" in self.model_fields_set:
+            _dict['tool_call_id'] = None
 
         # set to None if ts (nullable) is None
         # and model_fields_set contains the field
@@ -130,7 +119,7 @@ class SessionEventIn(BaseModel):
 
     @classmethod
     def from_dict(cls, obj: Optional[Dict[str, Any]]) -> Optional[Self]:
-        """Create an instance of SessionEventIn from a dict"""
+        """Create an instance of SessionMessage from a dict"""
         if obj is None:
             return None
 
@@ -140,13 +129,10 @@ class SessionEventIn(BaseModel):
         _obj = cls.model_validate({
             "id": obj.get("id"),
             "role": obj.get("role"),
-            "kind": obj.get("kind") if obj.get("kind") is not None else 'message',
-            "text": obj.get("text"),
-            "tool": obj.get("tool"),
-            "call_id": obj.get("call_id"),
-            "input": obj.get("input"),
+            "content": Content1.from_dict(obj["content"]) if obj.get("content") is not None else None,
+            "tool_calls": [ToolCall.from_dict(_item) for _item in obj["tool_calls"]] if obj.get("tool_calls") is not None else None,
+            "tool_call_id": obj.get("tool_call_id"),
             "is_error": obj.get("is_error") if obj.get("is_error") is not None else False,
-            "data": obj.get("data"),
             "ts": obj.get("ts")
         })
         return _obj

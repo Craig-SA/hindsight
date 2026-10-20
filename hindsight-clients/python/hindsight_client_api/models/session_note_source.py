@@ -25,13 +25,12 @@ from typing_extensions import Self
 
 class SessionNoteSource(BaseModel):
     """
-    SessionNoteSource
+    Where a note comes from, so the agent can check it before acting on it.
     """ # noqa: E501
     document_id: StrictStr
     quote: Optional[StrictStr] = Field(default='', description="The source's own sentence closest to the note, verbatim.")
     mentioned_at: Optional[datetime] = None
-    metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["document_id", "quote", "mentioned_at", "metadata"]
+    __properties: ClassVar[List[str]] = ["document_id", "quote", "mentioned_at"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -91,8 +90,7 @@ class SessionNoteSource(BaseModel):
         _obj = cls.model_validate({
             "document_id": obj.get("document_id"),
             "quote": obj.get("quote") if obj.get("quote") is not None else '',
-            "mentioned_at": obj.get("mentioned_at"),
-            "metadata": obj.get("metadata")
+            "mentioned_at": obj.get("mentioned_at")
         })
         return _obj
 
