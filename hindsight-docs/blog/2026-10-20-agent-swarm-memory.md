@@ -1,8 +1,8 @@
 ---
 title: "Thirty Agents, One Memory"
 authors: [benfrank241]
-slug: "2026/10/19/agent-swarm-memory"
-date: 2026-10-19T12:00
+slug: "2026/10/20/agent-swarm-memory"
+date: 2026-10-20T12:00
 tags: [hindsight, agent-memory, swarms, multi-agent, consolidation, entity-resolution, concurrency, memory-defense]
 description: "A swarm writes the same fact thirty times, and nothing ever merges two raw facts. Which layer turns that redundancy into evidence instead of clutter, and the three places concurrency changes the answer."
 image: /img/blog/agent-swarm-memory.png
