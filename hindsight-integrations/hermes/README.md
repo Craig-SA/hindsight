@@ -302,6 +302,13 @@ The lookup stops at the repository root. Only `bank_id` is read.
 | `prefetch_waits_for_retain` | `true` | Before the background recall for the next turn, wait until the turn just saved can be found, so recall includes it. Runs off the reply path and adds no response time. |
 | `prefetch_retain_drain_timeout` | `10` | Most seconds that background recall waits for the save above before recalling anyway |
 
+### Live session (memory watcher)
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `session_watch` | `false` | Stream the conversation into a live Hindsight session (the sessions API): the prompt when a turn starts, each tool call with its result as soon as the tool returns, and the rest of the turn's messages when it ends. Hindsight saves each turn into memory itself, so the per-turn retain above is skipped (with `auto_retain: false` the session only watches). Its memory watcher checks what the agent does against what memory records and writes a note when something conflicts; a note reaches the agent on the next tool result (or before the next turn), never delaying it, and the agent credits a note it used to you with a `🧠 From Hindsight memory (memory watcher)` line. Needs a server with sessions; an older one falls back to the per-turn retain. |
+| `session_note_wait` | `0` | Seconds the start of a turn waits for the watcher's check of the new prompt, so a heads-up reaches the agent in the same turn. `0` never delays a reply; the note then arrives with the next turn. |
+
 ### Integration
 
 | Key | Default | Description |
@@ -381,6 +388,8 @@ These are used **only when there is no config file at all**. Once `hermes memory
 | `HINDSIGHT_RETAIN_INDICATOR` | `false` hides the "saving to memory" status line (`retain_indicator`) |
 | `HINDSIGHT_RECALL_INDICATOR` | `false` hides the "recalled N memories" status line (`recall_indicator`) |
 | `HINDSIGHT_RECALL_SYNC` | `true` recalls against the current message before answering (`recall_sync`) |
+| `HINDSIGHT_SESSION_WATCH` | `true` streams the conversation into a live session (`session_watch`) |
+| `HINDSIGHT_SESSION_NOTE_WAIT` | Seconds a turn waits for the watcher's heads-up (`session_note_wait`) |
 
 ## Client Version
 
