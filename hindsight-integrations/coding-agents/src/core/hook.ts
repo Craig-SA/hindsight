@@ -24,7 +24,7 @@
 import { existsSync } from "node:fs";
 import { deriveBankIdOrSkip } from "./bank";
 import type { Config } from "./config";
-import { applyBankConfig, loadConfig, WATCH_HARNESSES } from "./config";
+import { applyBankConfig, loadConfig, watches } from "./config";
 import { diag, diagFilePath, readHookEvent } from "./diag";
 import { describeError, log, setLogLevel } from "./log";
 import { startBackgroundSeed } from "./seed";
@@ -51,7 +51,7 @@ import {
   type SessionCache,
 } from "./session-cache";
 import { appendJournalTurn, journalPath } from "./turn-journal";
-import { startWatchSync } from "./watch-entry";
+import { notesKey, startSync } from "./watch-entry";
 
 export interface HookEventFields {
   prompt?: string;
@@ -480,15 +480,15 @@ export async function runHook(
   // check starts while the agent reads its first files rather than at its first tool call; and a
   // note still waiting (written after the last tool call of the previous turn) goes out with it.
   let watchNotes: string | undefined;
-  if (cfg.autoInject === "watch" && WATCH_HARNESSES.includes(spec.harness) && sessionId) {
+  if (watches(cfg, spec.harness) && sessionId) {
     const transcriptPath = (ev as { transcript_path?: unknown }).transcript_path;
-    startWatchSync(spec.harness, {
+    startSync(spec.harness, {
       session_id: sessionId,
       transcript_path: typeof transcriptPath === "string" ? transcriptPath : undefined,
       cwd,
       prompt,
     });
-    watchNotes = takePendingContext(`${spec.harness}-watch`, sessionId);
+    watchNotes = takePendingContext(notesKey(spec.harness), sessionId);
   }
   const client = makeClient({
     apiUrl: cfg.apiUrl,

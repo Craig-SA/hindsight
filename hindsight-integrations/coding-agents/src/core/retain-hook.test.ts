@@ -32,11 +32,12 @@ vi.mock("./config", async (importOriginal) => {
   return { ...actual, loadConfig: () => actual.resolveConfig(rawConfig) };
 });
 
-/** The session sync the Stop hook runs in watch mode: what the server answers, per test. */
+/** The session sync the Stop hook runs on Claude Code and Codex: what the server answers, per
+ *  test (null: no sessions, so the plugin writes back itself). */
 let syncAnswer: () => Promise<unknown> = async () => null;
 vi.mock("./watch-entry", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./watch-entry")>();
-  return { ...actual, syncWatchedSession: vi.fn(() => syncAnswer()) };
+  return { ...actual, syncHarnessSession: vi.fn(() => syncAnswer()) };
 });
 
 let root: string;
@@ -932,7 +933,7 @@ describe("runRetainHook with the memory watcher on a session", () => {
       transcriptPath: ev.transcript_path as string,
       cwd: ev.cwd as string,
     }),
-    watch: { eventsOf: () => [], stopDelivers: true },
+    stopDeliversNotes: true,
   };
   let written: string[];
 
@@ -967,7 +968,7 @@ describe("runRetainHook with the memory watcher on a session", () => {
   };
 
   it("leaves saving to the session and hands a late note over by keeping the agent going", async () => {
-    syncAnswer = async () => ({ notes: ["K is 1024."], unsupported: false, checking: false });
+    syncAnswer = async () => ({ notes: ["K is 1024."], unsupported: false });
     const { retain, makeClient } = stubClient();
     await runRetainHook(spec, makeClient);
     expect(retain).not.toHaveBeenCalled();
@@ -982,6 +983,28 @@ describe("runRetainHook with the memory watcher on a session", () => {
     await runRetainHook(spec, makeClient);
     expect(retain).not.toHaveBeenCalled();
     expect(written).toEqual([]);
+  });
+
+  it("streams to the session without the watcher too: the session saves, no note is handed over", async () => {
+    rawConfig = { autoInject: "reflect" };
+    syncAnswer = async () => ({ notes: ["K is 1024."], unsupported: false });
+    const { retain, makeClient } = stubClient();
+    await runRetainHook(spec, makeClient);
+    expect(retain).not.toHaveBeenCalled();
+    expect(written).toEqual([]);
+  });
+
+  it("opens no session when there is neither a watcher nor saving", async () => {
+    rawConfig = { autoInject: "reflect", retainSessions: false };
+    let synced = 0;
+    syncAnswer = async () => {
+      synced++;
+      return null;
+    };
+    const { retain, makeClient } = stubClient();
+    await runRetainHook(spec, makeClient);
+    expect(synced).toBe(0);
+    expect(retain).not.toHaveBeenCalled();
   });
 
   it("writes back as before on a server without sessions", async () => {

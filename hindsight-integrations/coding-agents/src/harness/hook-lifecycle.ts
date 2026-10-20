@@ -6,7 +6,7 @@
  */
 import { runHook, type HookSpec } from "../core/hook";
 import { runRetainHook, type RetainHookSpec } from "../core/retain-hook";
-import { claudeEventsOf, codexEventsOf } from "../core/session-events";
+import { SESSION_HARNESSES } from "../core/session-events";
 import { runSessionStartHook, type SessionStartHookSpec } from "../core/session-start";
 import { ensureTraecodeWorkspaceMcp } from "../core/traecode-mcp";
 import { readCodexTranscript } from "../core/transcript-codex";
@@ -295,20 +295,27 @@ export const HOOK_HARNESSES: Record<HookHarnessName, HookHarnessSpec> = {
     },
     // The memory watcher (autoInject: "watch"; exits at once otherwise). Every tool, not only edits:
     // a heads-up must reach the agent on its first read, before it has changed anything. The hook
-    // returns in milliseconds; the review runs detached (see core/watch-entry.ts).
-    additionalHooks: [{ event: "PostToolUse", entry: "claude-watch-hook.js", timeout: 10 }],
+    // returns in milliseconds; the sync runs detached (see core/watch-entry.ts).
+    additionalHooks: [
+      { event: "PostToolUse", entry: SESSION_HARNESSES["claude-code"].entry, timeout: 10 },
+    ],
     sessionStart: { ...standardSessionStart("claude-code"), accept: notGrokHosted },
     prompt: { ...claudePrompt, accept: notGrokHosted },
     retain: {
       hostTimeoutSec: 60,
       harness: "claude-code",
       accept: notGrokHosted,
-      watch: { eventsOf: claudeEventsOf, stopDelivers: true },
+      // A late watcher note keeps the agent going (`decision: "block"`) instead of waiting a turn.
+      stopDeliversNotes: true,
       parse: (ev) => ({
         sessionId: ev.session_id as string | undefined,
         transcriptPath: ev.transcript_path as string | undefined,
         cwd: ev.cwd as string | undefined,
+        // The final reply: the transcript may not hold it yet when Stop runs (see syncSession).
+        lastAssistantMessage: ev.last_assistant_message as string | undefined,
       }),
+      // Prose passes through; a content-block list becomes its text.
+      readLastMessage: dcodeAssistantText,
     },
   },
   codex: {
@@ -319,19 +326,20 @@ export const HOOK_HARNESSES: Record<HookHarnessName, HookHarnessSpec> = {
       stop: { event: "Stop", entry: "codex-stop-hook.js", timeout: 60 },
     },
     // The memory watcher, as on Claude Code: Codex's PostToolUse hook speaks Claude's protocol.
-    additionalHooks: [{ event: "PostToolUse", entry: "codex-watch-hook.js", timeout: 10 }],
+    additionalHooks: [{ event: "PostToolUse", entry: SESSION_HARNESSES.codex.entry, timeout: 10 }],
     sessionStart: standardSessionStart("codex"),
     prompt: codexPrompt,
     retain: {
       hostTimeoutSec: 60,
       harness: "codex",
       // Codex's Stop hook is not known to take `decision: "block"`: a late note waits for the next prompt.
-      watch: { eventsOf: codexEventsOf, stopDelivers: false },
       parse: (ev) => ({
         sessionId: ev.session_id as string | undefined,
         transcriptPath: ev.transcript_path as string | undefined,
         cwd: ev.cwd as string | undefined,
+        lastAssistantMessage: ev.last_assistant_message as string | undefined,
       }),
+      readLastMessage: dcodeAssistantText,
       readTranscript: readCodexTranscript,
     },
   },

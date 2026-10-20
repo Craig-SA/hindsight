@@ -21,7 +21,7 @@ async function watchConfigWith(config: object) {
   process.env.HINDSIGHT_CONFIG = join(root, "coding-agent.json");
   writeFileSync(process.env.HINDSIGHT_CONFIG, JSON.stringify(config));
   const { watchConfig } = await import("./watch-entry");
-  return watchConfig({ harness: "claude-code" } as never, root);
+  return watchConfig("claude-code", root);
 }
 
 describe("watchConfig: the per-repo override decides whether this session watches", () => {
@@ -50,20 +50,19 @@ describe("watchConfig: the per-repo override decides whether this session watche
 });
 
 describe("every watching harness is wired to its session", () => {
-  it("has a watch entry, a PostToolUse watch hook and a Stop hook that ends the session's turn", async () => {
+  it("has a PostToolUse watch hook and a Stop hook that ends the session's turn", async () => {
     const { WATCH_HARNESSES } = await import("./config");
-    const { WATCH_ENTRIES } = await import("./watch-entry");
+    const { SESSION_HARNESSES } = await import("./session-events");
     const { HOOK_HARNESSES } = await import("../harness/hook-lifecycle");
     for (const harness of WATCH_HARNESSES) {
       const spec = HOOK_HARNESSES[harness as keyof typeof HOOK_HARNESSES];
       expect(spec, harness).toBeDefined();
-      expect(WATCH_ENTRIES[harness], harness).toBeTruthy();
       expect(
         spec.additionalHooks?.map((h) => h.entry),
         harness
-      ).toContain(WATCH_ENTRIES[harness]);
+      ).toContain(SESSION_HARNESSES[harness].entry);
       // Without it the Stop hook writes the transcript itself next to the session's own save.
-      expect(spec.retain?.watch?.eventsOf, harness).toBeTypeOf("function");
+      expect(spec.retain?.harness, harness).toBe(harness);
     }
   });
 });

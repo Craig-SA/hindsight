@@ -6,7 +6,7 @@ import {
   claudeEventsOf,
   codexEventsOf,
   type AppendResult,
-  type SessionEvent,
+  type SessionAppend,
 } from "./session-events";
 import {
   emptySyncState,
@@ -15,7 +15,7 @@ import {
   syncSession,
   type SessionClient,
 } from "./session-sync";
-import { NOTE_LEAD } from "./watch";
+import { NOTE_CREDIT, NOTE_LEAD } from "./watch";
 import type { Config } from "./config";
 
 const line = (o: unknown) => `${JSON.stringify(o)}\n`;
@@ -47,6 +47,13 @@ const edit = (uuid: string, id: string) =>
     message: { content: [{ type: "tool_result", tool_use_id: id, content: "ok" }] },
   });
 
+const reply = (uuid: string, text: string) =>
+  line({
+    type: "assistant",
+    uuid,
+    message: { role: "assistant", content: [{ type: "text", text }] },
+  });
+
 function session() {
   const root = mkdtempSync(join(tmpdir(), "session-sync-"));
   const transcript = join(root, "t.jsonl");
@@ -56,11 +63,11 @@ function session() {
 
 /** A sessions server: records each append, answers with the notes it is given. */
 function server(notes: AppendResult[] = []) {
-  const appends: { events: SessionEvent[]; ack: number; session?: unknown }[] = [];
+  const appends: SessionAppend[] = [];
   const client: SessionClient = {
     appendSession: vi.fn(async (_id: string, body) => {
       appends.push(body);
-      return notes.shift() ?? { supported: true, notes: [], checking: false, lastSeq: 0 };
+      return notes.shift() ?? { supported: true, notes: [] };
     }),
   };
   return { client, appends };
@@ -73,7 +80,7 @@ const base = (s: ReturnType<typeof session>, client: SessionClient) => ({
   dir: s.dir,
   client,
   eventsOf: claudeEventsOf,
-  options: { watch: true },
+  options: () => ({ watch: true }),
   diff: () => "+++ b/units.py\n+K = 1024",
 });
 
@@ -82,7 +89,7 @@ describe("claudeEventsOf", () => {
     const long = "y".repeat(10_000);
     const events = claudeEventsOf(JSON.parse(prompt("u1", long)), 0);
     expect(events).toEqual([
-      { id: "u1:0", role: "user", kind: "message", text: long, ts: "2026-10-19T10:00:00Z" },
+      { id: "u1:0", role: "user", content: long, ts: "2026-10-19T10:00:00Z" },
     ]);
   });
 
@@ -91,20 +98,15 @@ describe("claudeEventsOf", () => {
       .trim()
       .split("\n")
       .map((l, i) => claudeEventsOf(JSON.parse(l), i)[0]);
+    // The server ids the call `<message id>:<call id>`, as it always did.
     expect(call).toMatchObject({
+      id: "u2a:0",
       role: "assistant",
-      kind: "tool_call",
-      tool: "Edit",
-      call_id: "t1",
+      tool_calls: [{ id: "t1", type: "function", function: { name: "Edit" } }],
     });
-    expect((call.input?.new_string as string).length).toBe(2000);
-    expect(result).toEqual({
-      id: "u2b:0",
-      role: "tool",
-      kind: "tool_result",
-      call_id: "t1",
-      text: "ok",
-    });
+    const input = JSON.parse(call.tool_calls?.[0].function.arguments ?? "{}");
+    expect(input.new_string.length).toBe(2000);
+    expect(result).toEqual({ id: "u2b:0", role: "tool", tool_call_id: "t1", content: "ok" });
   });
 
   it("skips meta lines and subagents", () => {
@@ -135,11 +137,20 @@ describe("codexEventsOf", () => {
       },
       7
     );
-    expect(cmd.map((e) => [e.kind, e.tool, e.input, e.is_error])).toEqual([
-      ["tool_call", "Bash", { command: "make" }, undefined],
-      ["tool_result", undefined, undefined, true],
+    expect(cmd).toEqual([
+      {
+        id: "c1@7:0",
+        role: "assistant",
+        tool_calls: [
+          {
+            id: "c1",
+            type: "function",
+            function: { name: "Bash", arguments: '{"command":"make"}' },
+          },
+        ],
+      },
+      { id: "c1@7:1", role: "tool", tool_call_id: "c1", content: "boom", is_error: true },
     ]);
-    expect(cmd[0].id).toBe("c1@7:0");
   });
 });
 
@@ -147,15 +158,24 @@ describe("syncSession", () => {
   it("sends the new lines once, with the session's options on the first append only", async () => {
     const s = session();
     const { client, appends } = server();
+    const options = vi.fn(() => ({ watch: true }));
+    const sync = () => syncSession({ ...base(s, client), options });
     appendFileSync(s.transcript, prompt("u1", "Fix parse_quantity."));
-    await syncSession(base(s, client));
-    await syncSession(base(s, client));
+    await sync();
+    await sync();
     appendFileSync(s.transcript, edit("u2", "t1"));
-    await syncSession(base(s, client));
-    expect(appends.map((a) => a.events.map((e) => e.id))).toEqual([
+    await sync();
+    expect(options).toHaveBeenCalledTimes(1);
+    expect(appends.map((a) => a.messages.map((m) => m.id))).toEqual([
       ["u1:0"],
       [],
-      ["u2a:0", "u2b:0", expect.stringMatching(/^diff:/)],
+      ["u2a:0", "u2b:0"],
+    ]);
+    // A tool ran and the tree changed: the diff rides along.
+    expect(appends.map((a) => a.state)).toEqual([
+      undefined,
+      undefined,
+      { diff: "+++ b/units.py\n+K = 1024" },
     ]);
     expect(appends.map((a) => a.session)).toEqual([{ watch: true }, undefined, undefined]);
   });
@@ -165,21 +185,17 @@ describe("syncSession", () => {
     const note = {
       seq: 3,
       text: "Before you change units.py: K is 1024.",
-      trigger: "task",
-      memory_ids: ["m1"],
       source: {
         document_id: "conversation:old",
         quote: "K is 1024, never 1000.",
         mentioned_at: "2026-10-01T10:00:00Z",
       },
     };
-    const { client, appends } = server([
-      { supported: true, notes: [note], checking: false, lastSeq: 3 },
-    ]);
+    const { client, appends } = server([{ supported: true, notes: [note] }]);
     appendFileSync(s.transcript, prompt("u1", "Fix it."));
     const r = await syncSession(base(s, client));
     expect(r.notes).toEqual([
-      `${NOTE_LEAD} Before you change units.py: K is 1024. Source: a past session (2026-10-01) — "K is 1024, never 1000."`,
+      `${NOTE_LEAD} Before you change units.py: K is 1024. Source: a past session (2026-10-01) — "K is 1024, never 1000.". If you use it, credit it to the user: "${NOTE_CREDIT} …"`,
     ]);
     await syncSession(base(s, client));
     expect(appends.map((a) => a.ack)).toEqual([0, 3]);
@@ -194,7 +210,7 @@ describe("syncSession", () => {
     appendFileSync(s.transcript, prompt("u1", "Fix it."));
     await expect(syncSession(base(s, failing))).rejects.toThrow("down");
     await syncSession(base(s, client));
-    expect(appends[0].events.map((e) => e.id)).toEqual(["u1:0"]);
+    expect(appends[0].messages.map((m) => m.id)).toEqual(["u1:0"]);
   });
 
   it("sends the prompt from the prompt hook at once, and skips its copy in the transcript", async () => {
@@ -204,8 +220,8 @@ describe("syncSession", () => {
     await syncSession({ ...base(s, client), prompt: { text: "Fix it." } });
     appendFileSync(s.transcript, prompt("u1", "Fix it.\n"));
     await syncSession({ ...base(s, client), turnEnd: true });
-    expect(appends[0].events.map((e) => [e.kind, e.text])).toEqual([["message", "Fix it."]]);
-    expect(appends[1].events.map((e) => e.kind)).toEqual(["turn_end"]);
+    expect(appends[0].messages.map((m) => [m.role, m.content])).toEqual([["user", "Fix it."]]);
+    expect(appends[1]).toMatchObject({ messages: [], turn_end: true });
   });
 
   it("marks a server without sessions, and stops asking it", async () => {
@@ -225,7 +241,7 @@ describe("syncSession", () => {
     await syncSession(base(s, client));
     writeFileSync(s.transcript, prompt("u3", "New file."));
     await syncSession(base(s, client));
-    expect(appends[1].events.map((e) => e.id)).toEqual(["u3:0"]);
+    expect(appends[1].messages.map((m) => m.id)).toEqual(["u3:0"]);
   });
 });
 
@@ -233,6 +249,7 @@ describe("sessionOptions", () => {
   it("saves into the conversation document the plugin always wrote, with its tags and scopes", () => {
     const cfg = {
       retainSessions: true,
+      autoInject: "reflect",
       observationScopes: "shared",
       retainTags: ["team:a"],
     } as unknown as Config;
@@ -242,13 +259,11 @@ describe("sessionOptions", () => {
       sessionId: "abc",
       bankId: "b",
       cwd: "/tmp/x",
-      title: "Fix it",
     });
+    expect(o).not.toHaveProperty("source");
     expect(o).toMatchObject({
-      source: "claude-code",
-      title: "Fix it",
       document_id: "conversation:abc",
-      watch: true,
+      watch: false,
       retain: "turns",
       tags: ["team:a", "source:chat", "harness:claude-code"],
       metadata: {
@@ -269,6 +284,16 @@ describe("sessionOptions", () => {
         cwd: "/",
       }).retain
     ).toBe("off");
+    // The watcher runs only where it was asked for; the session saves the conversation either way.
+    expect(
+      sessionOptions({
+        cfg: { ...cfg, autoInject: "watch" },
+        harness: "claude-code",
+        sessionId: "x",
+        bankId: "b",
+        cwd: "/",
+      }).watch
+    ).toBe(true);
   });
 
   it("starts from an empty state", () => {
@@ -278,5 +303,21 @@ describe("sessionOptions", () => {
       opened: false,
       unsupported: false,
     });
+  });
+  it("sends the final reply with the turn end, and not again when the transcript catches up", async () => {
+    // Claude Code writes the final reply after its Stop hook runs: the hook hands it over itself.
+    const s = session();
+    const { client, appends } = server();
+    appendFileSync(s.transcript, prompt("u1", "Fix it."));
+    const credit = "> 🧠 **From Hindsight memory (memory watcher)** — K is 1024.";
+    await syncSession({ ...base(s, client), turnEnd: true, reply: credit });
+    expect(appends[0].messages.map((m) => [m.role, m.content])).toEqual([
+      ["user", "Fix it."],
+      ["assistant", credit],
+    ]);
+    expect(appends[0].turn_end).toBe(true);
+    appendFileSync(s.transcript, reply("a1", credit) + prompt("u2", "Thanks."));
+    await syncSession(base(s, client));
+    expect(appends[1].messages.map((m) => m.content)).toEqual(["Thanks."]);
   });
 });

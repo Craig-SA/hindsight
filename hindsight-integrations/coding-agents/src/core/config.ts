@@ -17,6 +17,7 @@ import { join } from "node:path";
 import { DEFAULT_SEED_LIMIT } from "./seed";
 import { isOptedIn, pathSection } from "./bank";
 import { log } from "./log";
+import { SESSION_HARNESSES } from "./session-events";
 import {
   DEFAULT_OBSERVATION_SCOPES,
   DEFAULT_PAGE_SEARCH_LIMIT,
@@ -131,7 +132,7 @@ export interface RawConfig {
    *    "recall"  — the bank's memories recalled for the prompt (`recallOptions`; no LLM)
    *    "none"    — nothing; the tool guide routes new goals through pages before optional reflection
    *    "watch"   — nothing up front: a memory watcher follows the session in the background and
-   *                speaks only when memory holds what the agent must hear (Claude Code, Codex; core/watch.ts) */
+   *                speaks only when memory holds what the agent must hear (Claude Code, Codex; core/session-sync.ts) */
   autoInject?: AutoInject;
   /** @deprecated Use `autoInject`. Still honoured: false = `autoInject: "none"`, true = "reflect";
    *  ignored when `autoInject` is set. Setting it logs a deprecation warning. */
@@ -579,8 +580,13 @@ function resolveDefaultBankConfig(raw: RawConfig["defaultBankConfig"]): Record<s
 export type AutoInject = "reflect" | "pages" | "recall" | "none" | "watch";
 const AUTO_INJECT_MODES: readonly AutoInject[] = ["reflect", "pages", "recall", "none", "watch"];
 
-/** The harnesses whose PostToolUse hook runs the memory watcher (core/watch-entry.ts). */
-export const WATCH_HARNESSES: readonly string[] = ["claude-code", "codex"];
+/** The harnesses whose PostToolUse hook runs the memory watcher (core/watch-entry.ts): the ones
+ *  whose transcript the plugin reads into a session. */
+export const WATCH_HARNESSES: readonly string[] = Object.keys(SESSION_HARNESSES);
+
+/** Whether this session runs the memory watcher. */
+export const watches = (cfg: Pick<Config, "autoInject">, harness: string): boolean =>
+  cfg.autoInject === "watch" && WATCH_HARNESSES.includes(harness);
 
 /** `autoInject` wins; then the deprecated `autoReflect`; then "watch" where it runs, else "reflect". */
 function resolveAutoInject(raw: RawConfig): AutoInject {

@@ -15,9 +15,7 @@
  */
 import { deriveBankIdOrSkip } from "./bank";
 import { retainLiveSession } from "./chat";
-import { applyBankConfig, loadConfig, WATCH_HARNESSES } from "./config";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { applyBankConfig, loadConfig, watches } from "./config";
 import { DAEMON_WAIT_RETAIN_MS, ensureDaemon } from "./daemon";
 import { diag, readHookEvent } from "./diag";
 import { describeError, log, setLogLevel } from "./log";
@@ -32,10 +30,9 @@ import {
   stashPendingContext,
   takePendingContext,
 } from "./session-cache";
-import type { EventsOf } from "./session-events";
+import { SESSION_HARNESSES } from "./session-events";
 import { sessionsUnsupported, type SyncResult } from "./session-sync";
-import { syncWatchedSession } from "./watch-entry";
-import { sessionDir } from "./watch-hook";
+import { notesKey, sessionStateDir, syncHarnessSession } from "./watch-entry";
 import { readClaudeTranscript } from "./transcript";
 import { appendJournalTurn, journalPath, readJournalTranscript } from "./turn-journal";
 import { stripInjectedMemory } from "./transcript-util";
@@ -89,11 +86,10 @@ export interface RetainHookSpec {
    * read of the ephemeral transcript the host is about to delete, and closing the turn is a write.
    */
   /**
-   * The memory watcher's session (autoInject "watch", core/session-sync.ts): how this harness's
-   * transcript reads as session events, and whether its Stop hook may hand over a late note by
-   * keeping the agent going (Claude Code's `decision: "block"`).
+   * Whether this Stop hook may hand over a late memory-watcher note by keeping the agent going
+   * (Claude Code's `decision: "block"`); otherwise the note waits for the next prompt.
    */
-  watch?: { eventsOf: EventsOf; stopDelivers: boolean };
+  stopDeliversNotes?: boolean;
   journal?: {
     /** The assistant reply for this turn, from the Stop event. "" when the host sent none. */
     assistantText(event: Record<string, unknown>): string;
@@ -141,7 +137,7 @@ export async function buildRetain(args: {
   // Decode BEFORE stripping/trimming: the raw field can be a serialized content-block list rather
   // than prose (see LastMessageReader), and the injected-memory tags live inside its text blocks.
   const decoded = args.lastAssistantMessage
-    ? (args.readLastMessage ?? ((raw: string) => raw))(args.lastAssistantMessage)
+    ? (args.readLastMessage?.(args.lastAssistantMessage) ?? args.lastAssistantMessage)
     : "";
   const lastAssistantMessage = stripInjectedMemory(decoded).trim();
   // Dcode materializes before Stop handlers run, so its final response can be absent from the
@@ -245,26 +241,36 @@ export async function runRetainHook(
   const bankId = resolved.bankId;
   if (cfg.disabled) return; // per-bank opt-out (banks.<id> override)
 
-  // The memory watcher on a session (a server with sessions): the end of the turn goes to the
-  // session, and the session saves the turn into this same `conversation:<session>` document — so
-  // nothing is written back from here, and only usage is recorded. Once a session is in use the
-  // plugin never also writes back itself, even when this sync fails: the document would get the
-  // turn twice when the session saves it later. A note written after the agent's last tool call is
-  // handed over now as a reason to go on, where the harness allows it, instead of waiting a turn.
+  // A harness whose transcript the plugin reads streams the conversation into a Hindsight session
+  // (a server with sessions, core/session-sync.ts): the end of the turn goes to the session, and
+  // the session saves the turn into this same `conversation:<session>` document — so nothing is
+  // written back from here, and only usage is recorded (`retainSessions: false` reaches the session
+  // as `retain: "off"`, see sessionOptions; with no watcher either there is nothing to stream).
+  // Once a session is in use the plugin never also writes back itself, even when this sync fails:
+  // the document would get the turn twice when the session saves it later. With the memory
+  // watcher, a note written after the agent's last tool call is handed over now as a reason to go
+  // on, where the harness allows it, instead of waiting a turn.
+  const watching = watches(cfg, spec.harness);
   if (
-    spec.watch &&
+    SESSION_HARNESSES[spec.harness] &&
     sessionId &&
-    cfg.autoInject === "watch" &&
-    WATCH_HARNESSES.includes(spec.harness) &&
-    !sessionsUnsupported(sessionDir(join(tmpdir(), "hindsight-watch"), sessionId))
+    (watching || cfg.retainSessions) &&
+    !sessionsUnsupported(sessionStateDir(sessionId))
   ) {
     await ensureDaemon(cfg, spec.harness, { waitMs: DAEMON_WAIT_RETAIN_MS });
     let synced: SyncResult | null = null;
     let failed = false;
     try {
-      synced = await syncWatchedSession(
-        { harness: spec.harness, eventsOf: spec.watch.eventsOf },
-        { session_id: sessionId, transcript_path: transcriptPath, cwd },
+      synced = await syncHarnessSession(
+        spec.harness,
+        {
+          session_id: sessionId,
+          transcript_path: transcriptPath,
+          cwd,
+          ...(lastAssistantMessage
+            ? { reply: spec.readLastMessage?.(lastAssistantMessage) ?? lastAssistantMessage }
+            : {}),
+        },
         { cfg, bankId },
         true
       );
@@ -273,16 +279,15 @@ export async function runRetainHook(
       diag(spec.harness, "session_sync_failed", { error: describeError(e) });
     }
     if (synced || failed) {
-      const notes = [
-        takePendingContext(`${spec.harness}-watch`, sessionId),
-        ...(synced?.notes ?? []),
-      ]
-        .filter(Boolean)
-        .join("\n\n");
+      const notes = watching
+        ? [takePendingContext(notesKey(spec.harness), sessionId), ...(synced?.notes ?? [])]
+            .filter(Boolean)
+            .join("\n\n")
+        : "";
       if (notes) {
-        if (spec.watch.stopDelivers)
+        if (spec.stopDeliversNotes)
           process.stdout.write(JSON.stringify({ decision: "block", reason: notes }));
-        else stashPendingContext(`${spec.harness}-watch`, sessionId, notes); // the next prompt hands it over
+        else stashPendingContext(notesKey(spec.harness), sessionId, notes); // the next prompt hands it over
       }
       await buildRetain({
         harness: spec.harness,

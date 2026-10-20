@@ -24,7 +24,7 @@ import {
 import { version as PKG_VERSION } from "../../package.json";
 import { pool, semverGte, sleep } from "./util";
 import type { RetainStamp } from "./retain-stamp";
-import type { AppendResult, SessionEvent, SessionNote, SessionOptions } from "./session-events";
+import type { AppendResult, SessionAppend, SessionNote } from "./session-events";
 
 /** Sent on every request so the server can tell which integration is calling. */
 export const USER_AGENT = `hindsight-coding-agents/${PKG_VERSION}`;
@@ -835,54 +835,13 @@ export class HindsightClient {
   }
 
   /**
-   * Reflect that may answer nothing (`abstain`): the memory watcher's one call per moment. The
-   * server's decision model is asked `question` about `context` over the memories `searchQueries`
-   * find; most moments come back empty with no LLM call. `memoryIds` are the memories the answer
-   * came from (observations only). `supported` is false on a server too old to abstain, which
-   * answers every moment and must not be listened to.
-   */
-  async reflectMaybe(
-    question: string,
-    opts: { context: string; searchQueries: string[]; timeoutMs: number }
-  ): Promise<{ text: string; memoryIds: string[]; supported: boolean }> {
-    const r = await this.req(
-      "POST",
-      this.bankUrl("/reflect"),
-      {
-        query: question,
-        context: opts.context,
-        abstain: true,
-        search_queries: opts.searchQueries,
-        budget: "low",
-        max_tokens: 600,
-        fact_types: ["observation"],
-        exclude_mental_models: true,
-        include: { facts: {} },
-      },
-      [],
-      opts.timeoutMs
-    );
-    if (r.status === 404) return { text: "", memoryIds: [], supported: true };
-    const data = (await r.json()) as {
-      text?: string;
-      abstained?: boolean;
-      based_on?: { memories?: { id: string }[] };
-    };
-    return {
-      text: data.abstained ? "" : (data.text ?? "").trim(),
-      memoryIds: (data.based_on?.memories ?? []).map((m) => m.id),
-      supported: typeof data.abstained === "boolean",
-    };
-  }
-
-  /**
    * Send a live session what happened since the last append, and take the notes it has (see
    * core/session-sync.ts). `supported: false` when the server predates sessions: the route is
    * unknown (404), since on a server that has it an append creates the session it names.
    */
   async appendSession(
     sessionId: string,
-    body: { events: SessionEvent[]; ack: number; session?: SessionOptions },
+    body: SessionAppend,
     timeoutMs: number
   ): Promise<AppendResult> {
     const r = await this.req(
@@ -893,34 +852,8 @@ export class HindsightClient {
       timeoutMs
     );
     if (r.status === 404 || r.status === 405) return { supported: false };
-    const data = (await r.json()) as {
-      notes?: SessionNote[];
-      checking?: boolean;
-      last_seq?: number;
-    };
-    return {
-      supported: true,
-      notes: data.notes ?? [],
-      checking: Boolean(data.checking),
-      lastSeq: data.last_seq ?? 0,
-    };
-  }
-
-  /** One memory: its document, date, and (for an observation) the memories it was built from. */
-  async getMemory(id: string): Promise<{
-    document_id?: string | null;
-    mentioned_at?: string | null;
-    source_memory_ids?: string[];
-  } | null> {
-    const r = await this.req("GET", this.bankUrl(`/memories/${encodeURIComponent(id)}`));
-    return r.status === 404 ? null : ((await r.json()) as Record<string, never>);
-  }
-
-  /** A document's stored text, or "" when the bank keeps none. */
-  async documentText(id: string): Promise<string> {
-    const r = await this.req("GET", this.bankUrl(`/documents/${encodeURIComponent(id)}`));
-    if (r.status === 404) return "";
-    return String(((await r.json()) as { original_text?: string }).original_text ?? "");
+    const data = (await r.json()) as { notes?: SessionNote[] };
+    return { supported: true, notes: data.notes ?? [] };
   }
 
   /**

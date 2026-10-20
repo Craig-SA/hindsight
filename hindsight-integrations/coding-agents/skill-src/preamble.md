@@ -24,7 +24,9 @@ explains what happens automatically, which tools you have, and how to configure 
   page search hits), `recall` (recalled observations), `watch` (the watcher), or `none` (nothing
   injected; the agent searches the knowledge pages first and reflects only when they are too shallow).
 - **Write-back**: the session transcript is retained into the bank automatically at session end
-  (per-turn on opencode). The user never needs to "save" a conversation.
+  (per-turn on opencode; on Claude Code and Codex with a server that has sessions, the Hindsight
+  session saves it each turn). The user never
+  needs to "save" a conversation.
 
 ## Storing things deliberately
 
