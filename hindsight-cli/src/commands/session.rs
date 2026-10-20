@@ -1,4 +1,4 @@
-//! Session commands: live conversations streamed into a bank, and the memory watcher's side of them.
+//! Session commands: live sessions streamed into a bank, and what Hindsight did in them.
 //!
 //! `events --follow` tails a session as it happens: what the client sends, and Hindsight's checks,
 //! notes and saves, one line each.
@@ -140,12 +140,11 @@ pub fn list(
         println!(
             "    {}",
             ui::dim(&format!(
-                "{} events · {} checks · {} notes ({} delivered) · updated {}",
+                "{} events · {} checks · {} notes · last active {}",
                 s["event_count"],
                 s["check_count"],
                 s["note_count"],
-                s["delivered_count"],
-                s["updated_at"].as_str().unwrap_or_default()
+                s["last_event_at"].as_str().unwrap_or("-")
             ))
         );
     }
@@ -183,7 +182,7 @@ pub struct MessageArgs {
 }
 
 pub struct SessionArgs {
-    pub watch: bool,
+    pub live: bool,
     pub retain: Option<String>,
 }
 
@@ -227,10 +226,10 @@ pub fn append(
     if let Some(a) = ack {
         body["ack"] = json!(a);
     }
-    if session.watch || session.retain.is_some() {
+    if session.live || session.retain.is_some() {
         let mut opts = json!({});
-        if session.watch {
-            opts["watch"] = json!(true);
+        if session.live {
+            opts["live"] = json!(true);
         }
         if let Some(r) = &session.retain {
             opts["retain"] = json!(r);

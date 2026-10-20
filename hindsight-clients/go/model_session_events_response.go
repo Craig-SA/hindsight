@@ -21,9 +21,8 @@ var _ MappedNullable = &SessionEventsResponse{}
 
 // SessionEventsResponse struct for SessionEventsResponse
 type SessionEventsResponse struct {
+	// Oldest first: poll again with `after` set to the last `seq`.
 	Items []SessionEvent `json:"items"`
-	// The log's last position now: poll again with `after` set to it.
-	LastSeq int32 `json:"last_seq"`
 	Checking bool `json:"checking"`
 }
 
@@ -33,10 +32,9 @@ type _SessionEventsResponse SessionEventsResponse
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewSessionEventsResponse(items []SessionEvent, lastSeq int32, checking bool) *SessionEventsResponse {
+func NewSessionEventsResponse(items []SessionEvent, checking bool) *SessionEventsResponse {
 	this := SessionEventsResponse{}
 	this.Items = items
-	this.LastSeq = lastSeq
 	this.Checking = checking
 	return &this
 }
@@ -71,30 +69,6 @@ func (o *SessionEventsResponse) GetItemsOk() ([]SessionEvent, bool) {
 // SetItems sets field value
 func (o *SessionEventsResponse) SetItems(v []SessionEvent) {
 	o.Items = v
-}
-
-// GetLastSeq returns the LastSeq field value
-func (o *SessionEventsResponse) GetLastSeq() int32 {
-	if o == nil {
-		var ret int32
-		return ret
-	}
-
-	return o.LastSeq
-}
-
-// GetLastSeqOk returns a tuple with the LastSeq field value
-// and a boolean to check if the value has been set.
-func (o *SessionEventsResponse) GetLastSeqOk() (*int32, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.LastSeq, true
-}
-
-// SetLastSeq sets field value
-func (o *SessionEventsResponse) SetLastSeq(v int32) {
-	o.LastSeq = v
 }
 
 // GetChecking returns the Checking field value
@@ -132,7 +106,6 @@ func (o SessionEventsResponse) MarshalJSON() ([]byte, error) {
 func (o SessionEventsResponse) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["items"] = o.Items
-	toSerialize["last_seq"] = o.LastSeq
 	toSerialize["checking"] = o.Checking
 	return toSerialize, nil
 }
@@ -143,7 +116,6 @@ func (o *SessionEventsResponse) UnmarshalJSON(data []byte) (err error) {
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
 		"items",
-		"last_seq",
 		"checking",
 	}
 

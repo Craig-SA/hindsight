@@ -30,7 +30,6 @@ function ev(
     event_id: `id${seq}`,
     source,
     kind,
-    ts: null,
     created_at: new Date(clock).toISOString(),
     payload,
   };
@@ -194,7 +193,6 @@ describe("tool families", () => {
           event_id: "c",
           source: "client",
           kind: "tool_call",
-          ts: null,
           created_at: "2026-10-19T19:00:00Z",
           payload: { role: "assistant", tool, call_id: "c", input: {} },
         },

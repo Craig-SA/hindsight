@@ -293,9 +293,9 @@ export const HOOK_HARNESSES: Record<HookHarnessName, HookHarnessSpec> = {
       prompt: { event: "UserPromptSubmit", entry: "claude-hook.js", timeout: 30 },
       stop: { event: "Stop", entry: "claude-stop-hook.js", timeout: 60 },
     },
-    // The memory watcher (autoInject: "watch"; exits at once otherwise). Every tool, not only edits:
+    // The live session (autoInject: "live"; exits at once otherwise). Every tool, not only edits:
     // a heads-up must reach the agent on its first read, before it has changed anything. The hook
-    // returns in milliseconds; the sync runs detached (see core/watch-entry.ts).
+    // returns in milliseconds; the sync runs detached (see core/live-entry.ts).
     additionalHooks: [
       { event: "PostToolUse", entry: SESSION_HARNESSES["claude-code"].entry, timeout: 10 },
     ],
@@ -305,7 +305,7 @@ export const HOOK_HARNESSES: Record<HookHarnessName, HookHarnessSpec> = {
       hostTimeoutSec: 60,
       harness: "claude-code",
       accept: notGrokHosted,
-      // A late watcher note keeps the agent going (`decision: "block"`) instead of waiting a turn.
+      // A late live-session note keeps the agent going (`decision: "block"`) instead of waiting a turn.
       stopDeliversNotes: true,
       parse: (ev) => ({
         sessionId: ev.session_id as string | undefined,
@@ -325,7 +325,7 @@ export const HOOK_HARNESSES: Record<HookHarnessName, HookHarnessSpec> = {
       prompt: { event: "UserPromptSubmit", entry: "codex-hook.js", timeout: 30 },
       stop: { event: "Stop", entry: "codex-stop-hook.js", timeout: 60 },
     },
-    // The memory watcher, as on Claude Code: Codex's PostToolUse hook speaks Claude's protocol.
+    // The live session, as on Claude Code: Codex's PostToolUse hook speaks Claude's protocol.
     additionalHooks: [{ event: "PostToolUse", entry: SESSION_HARNESSES.codex.entry, timeout: 10 }],
     sessionStart: standardSessionStart("codex"),
     prompt: codexPrompt,

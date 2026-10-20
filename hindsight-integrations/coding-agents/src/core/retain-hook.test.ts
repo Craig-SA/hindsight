@@ -35,8 +35,8 @@ vi.mock("./config", async (importOriginal) => {
 /** The session sync the Stop hook runs on Claude Code and Codex: what the server answers, per
  *  test (null: no sessions, so the plugin writes back itself). */
 let syncAnswer: () => Promise<unknown> = async () => null;
-vi.mock("./watch-entry", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./watch-entry")>();
+vi.mock("./live-entry", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./live-entry")>();
   return { ...actual, syncHarnessSession: vi.fn(() => syncAnswer()) };
 });
 
@@ -919,9 +919,9 @@ describe("every session write-back path honors retainSessions", () => {
   });
 });
 
-describe("runRetainHook with the memory watcher on a session", () => {
+describe("runRetainHook with the live session on a session", () => {
   const event = () => ({
-    session_id: `sess-watch-${basename(root)}`,
+    session_id: `sess-live-${basename(root)}`,
     transcript_path: file,
     cwd: root,
   });
@@ -939,7 +939,7 @@ describe("runRetainHook with the memory watcher on a session", () => {
 
   beforeEach(() => {
     vi.stubEnv("HINDSIGHT_DIAG_FILE", join(root, "diag.log"));
-    rawConfig = { autoInject: "watch" };
+    rawConfig = { autoInject: "live" };
     writeFileSync(
       file,
       JSON.stringify({ type: "user", message: { role: "user", content: "fix it" } })
@@ -985,7 +985,7 @@ describe("runRetainHook with the memory watcher on a session", () => {
     expect(written).toEqual([]);
   });
 
-  it("streams to the session without the watcher too: the session saves, no note is handed over", async () => {
+  it("streams to the session without the live session too: the session saves, no note is handed over", async () => {
     rawConfig = { autoInject: "reflect" };
     syncAnswer = async () => ({ notes: ["K is 1024."], unsupported: false });
     const { retain, makeClient } = stubClient();
@@ -994,7 +994,7 @@ describe("runRetainHook with the memory watcher on a session", () => {
     expect(written).toEqual([]);
   });
 
-  it("opens no session when there is neither a watcher nor saving", async () => {
+  it("opens no session when there is neither a live session nor saving", async () => {
     rawConfig = { autoInject: "reflect", retainSessions: false };
     let synced = 0;
     syncAnswer = async () => {

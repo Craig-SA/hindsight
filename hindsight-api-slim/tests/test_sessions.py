@@ -11,7 +11,7 @@ import uuid
 import pytest
 
 from hindsight_api.engine.response_models import LLMCallTrace, MemoryFact, ReflectResult, TokenUsage
-from hindsight_api.engine.sessions.models import SessionAppendRequest, SessionMessage, SessionOptions
+from hindsight_api.engine.sessions.models import SessionAppendRequest, SessionMessage, SessionOptions, SessionState
 
 
 def _bank() -> str:
@@ -41,7 +41,7 @@ def _req(*steps: dict, ack: int | None = None, **session) -> SessionAppendReques
                 )
             )
         elif kind == "state":
-            state = e["data"]
+            state = SessionState(**e["data"])
         elif kind == "turn_end":
             turn_end = True
     return SessionAppendRequest(
@@ -100,7 +100,7 @@ async def test_append_is_ordered_and_a_retry_stores_nothing_twice(memory, reques
     ]
     assert [e.seq for e in (await s.events(bank, "s1", after=2, request_context=request_context)).items] == [3]
     summary = await s.get(bank, "s1", request_context=request_context)
-    assert summary.event_count == 3 and summary.document_id == "session:s1" and not summary.watch
+    assert summary.event_count == 3 and summary.document_id == "session:s1" and not summary.live
 
 
 async def test_without_watch_no_check_runs(memory, request_context, monkeypatch):
@@ -126,7 +126,7 @@ async def test_a_note_is_logged_delivered_until_acked_and_never_repeated(memory,
     r = await s.append(
         bank,
         "s1",
-        _req({"id": "1", "role": "user", "text": "Fix the rounding in pay/rounding.py"}, watch=True, retain="off"),
+        _req({"id": "1", "role": "user", "text": "Fix the rounding in pay/rounding.py"}, live=True, retain="off"),
         request_context=request_context,
     )
     # The check ran during the append (synchronous backend); the note comes back on the next append.
@@ -181,7 +181,7 @@ async def test_a_note_is_logged_delivered_until_acked_and_never_repeated(memory,
     assert outcomes == ["note", "note", "repeat"]
     summary = await s.get(bank, "s1", request_context=request_context)
     assert (summary.check_count, summary.note_count) == (3, 2) and not summary.checking
-    assert summary.delivered_count == 1  # the client acknowledged the heads-up only
+    assert summary.acked_seq == 3  # the client acknowledged the heads-up only
 
 
 async def test_the_log_records_when_a_note_first_goes_back_to_the_client(memory, request_context, monkeypatch):
@@ -190,7 +190,7 @@ async def test_the_log_records_when_a_note_first_goes_back_to_the_client(memory,
     await s.append(
         bank,
         "s1",
-        _req({"id": "1", "role": "user", "text": "Fix pay/rounding.py"}, watch=True, retain="off"),
+        _req({"id": "1", "role": "user", "text": "Fix pay/rounding.py"}, live=True, retain="off"),
         request_context=request_context,
     )
     # The note (seq 3) goes back with the next append's events, then again on a poll until acked.
@@ -211,7 +211,7 @@ async def test_an_abstained_check_is_logged_silent(memory, request_context, monk
     monkeypatch.setattr(memory, "reflect_async", _reflect_stub([("", [])], []))
     bank = _bank()
     r = await memory.sessions.append(
-        bank, "s1", _req({"id": "1", "role": "user", "text": "Fix it"}, watch=True), request_context=request_context
+        bank, "s1", _req({"id": "1", "role": "user", "text": "Fix it"}, live=True), request_context=request_context
     )
     log = (await memory.sessions.events(bank, "s1", request_context=request_context)).items
     assert [e.kind for e in log] == ["message", "check"] and log[1].payload["outcome"] == "silent"
@@ -225,7 +225,7 @@ async def test_a_failed_check_is_logged_and_the_session_goes_on(memory, request_
     monkeypatch.setattr(memory, "reflect_async", broken)
     bank = _bank()
     r = await memory.sessions.append(
-        bank, "s1", _req({"id": "1", "role": "user", "text": "Fix it"}, watch=True), request_context=request_context
+        bank, "s1", _req({"id": "1", "role": "user", "text": "Fix it"}, live=True), request_context=request_context
     )
     log = (await memory.sessions.events(bank, "s1", request_context=request_context)).items
     assert log[-1].payload["outcome"] == "error" and "provider down" in log[-1].payload["error"]
@@ -405,7 +405,7 @@ async def test_a_check_waits_for_the_session_to_settle_on_a_queue(memory, reques
     monkeypatch.setattr(memory.sessions, "_queue_check", queue_check)
     bank = _bank()
     await memory.sessions.append(
-        bank, "s1", _req({"id": "1", "role": "user", "text": "Fix it"}, watch=True), request_context=request_context
+        bank, "s1", _req({"id": "1", "role": "user", "text": "Fix it"}, live=True), request_context=request_context
     )
     assert queued == ["s1"] and calls == []
     # On a real queue the check goes back for later: the session only just moved.
@@ -413,7 +413,7 @@ async def test_a_check_waits_for_the_session_to_settle_on_a_queue(memory, reques
     with pytest.raises(DeferOperation) as deferred:
         await memory.sessions.run_check({"bank_id": bank, "session_id": "s1"})
     summary = await memory.sessions.get(bank, "s1", request_context=request_context)
-    wait = (deferred.value.exec_date - summary.updated_at).total_seconds()
+    wait = (deferred.value.exec_date - summary.last_event_at).total_seconds()
     assert 0.5 < wait <= 1.0 and calls == []  # quiet window, by the database's clock
     # Once it has settled, it runs.
     monkeypatch.setenv("HINDSIGHT_API_SESSION_CHECK_QUIET_MS", "0")

@@ -58,7 +58,7 @@ async def test_a_watched_session_hears_the_decision_once_and_its_turn_is_saved(c
         decided_bank,
         session,
         SessionAppendRequest(
-            session=SessionOptions(watch=True, retain="turns"),
+            session=SessionOptions(live=True, retain="turns"),
             messages=[SessionMessage.from_dict({"id": "1", "role": "user", "content": REQUEST})],
         ),
     )
@@ -103,5 +103,5 @@ async def test_a_watched_session_hears_the_decision_once_and_its_turn_is_saved(c
         ("assistant", "Reading parse_quantity as binary."),
     ]
     summary = await client.sessions.get_session(decided_bank, session)
-    assert (summary.note_count, summary.delivered_count) == (1, 1)
+    assert summary.note_count == 1 and summary.acked_seq == note.seq
     assert summary.saved_seq >= 3

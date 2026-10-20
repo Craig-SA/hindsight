@@ -3,7 +3,7 @@
 Hermes hands its memory provider the turn as OpenAI-style messages, which is the format the
 session API takes, so the messages go through as they are, each with an id the provider derives
 from the turn. Hindsight then saves each turn into memory (no per-turn retain from this side) and,
-with the memory watcher on, writes notes back when memory records a decision the turn goes against.
+with the live session on, writes notes back when memory records a decision the turn goes against.
 The provider hands those notes to the agent with the context it injects before each turn.
 
 Plain request/response over stdlib HTTP: it runs on Hermes' sync worker threads, and works against
@@ -118,13 +118,13 @@ class SessionLink:
         return notes
 
 
-NOTE_CREDIT = "> 🧠 **From Hindsight memory (memory watcher)** —"
+NOTE_CREDIT = "> 🧠 **From Hindsight memory (live session)** —"
 
 
 def notes_block(notes: list[SessionNote]) -> str:
     """The notes as the context block the agent reads before its turn."""
     lines = [
-        "# Hindsight memory watcher",
+        "# Hindsight live session",
         "Notes from this project's memory about what you are doing now. Check the quoted source before acting on one.",
         # The same credit the plugin's recall asks for, so the user sees memory at work.
         f'When a note shapes what you do, tell the user, starting with: "{NOTE_CREDIT} <what it told you>". '
@@ -138,7 +138,7 @@ def notes_block(notes: list[SessionNote]) -> str:
 
 
 def tool_call_messages(turn: int, call_id: str, name: str, args: Any, result: Any) -> list[dict[str, Any]]:
-    """One tool call and its result, sent as soon as the tool returns so the watcher sees it mid-turn."""
+    """One tool call and its result, sent as soon as the tool returns so the live session sees it mid-turn."""
     return [
         {
             "id": f"t{turn}:call:{call_id}",

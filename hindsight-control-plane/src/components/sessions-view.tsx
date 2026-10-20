@@ -208,7 +208,7 @@ function SessionsList({ onOpenSession }: { onOpenSession: (id: string) => void }
                 <TableHead className="w-[11rem]">{t("colActivity")}</TableHead>
                 <TableHead className="w-[8rem]">{t("colNotes")}</TableHead>
                 <TableHead className="w-[9rem]">{t("colLastActivity")}</TableHead>
-                <TableHead className="w-[6rem]">{t("colWatch")}</TableHead>
+                <TableHead className="w-[6rem]">{t("colLive")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -264,20 +264,20 @@ function SessionsList({ onOpenSession }: { onOpenSession: (id: string) => void }
                   </TableCell>
                   <TableCell
                     className="text-xs text-muted-foreground whitespace-nowrap"
-                    title={new Date(s.last_event_at ?? s.updated_at).toLocaleString(locale)}
+                    title={new Date(s.last_event_at ?? s.created_at).toLocaleString(locale)}
                   >
-                    {relativeTime(s.last_event_at ?? s.updated_at, locale, now)}
+                    {relativeTime(s.last_event_at ?? s.created_at, locale, now)}
                   </TableCell>
                   <TableCell>
-                    {s.watch ? (
+                    {s.live ? (
                       <span className="inline-flex items-center gap-1 text-xs text-foreground">
                         <Eye className="h-3.5 w-3.5 text-primary" />
-                        {t("watchOn")}
+                        {t("liveOn")}
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                         <EyeOff className="h-3.5 w-3.5" />
-                        {t("watchOff")}
+                        {t("liveOff")}
                       </span>
                     )}
                   </TableCell>

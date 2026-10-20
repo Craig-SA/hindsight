@@ -58,7 +58,8 @@ export type RetainContentBlock =
 export interface SessionSummary {
   session_id: string;
   document_id: string;
-  watch: boolean;
+  /** Hindsight follows the session live and may write notes to the agent. */
+  live: boolean;
   retain: "turns" | "idle" | "off";
   event_count: number;
   check_count: number;
@@ -68,10 +69,9 @@ export interface SessionSummary {
   saved_seq: number;
   /** Seq of the last note the client confirmed delivered: a note is delivered iff seq <= acked_seq. */
   acked_seq: number;
-  /** A watcher check is queued or running right now. */
+  /** A live-session check is queued or running right now. */
   checking: boolean;
   created_at: string;
-  updated_at: string;
   last_event_at: string | null;
   metadata: Record<string, unknown>;
 }
@@ -81,7 +81,6 @@ export interface SessionEvent {
   event_id: string;
   source: "client" | "hindsight";
   kind: string;
-  ts: string | null;
   created_at: string;
   /** Shape depends on `source` + `kind`; lib/session-timeline.ts types and reads it. */
   payload: Record<string, unknown>;
@@ -96,7 +95,6 @@ interface SessionListResponse {
 
 interface SessionEventsResponse {
   items: SessionEvent[];
-  last_seq: number;
   checking: boolean;
 }
 

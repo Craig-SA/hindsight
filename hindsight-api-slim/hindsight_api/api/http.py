@@ -1661,7 +1661,7 @@ class ReflectRequest(ReflectDefaultOptions):
         "when it sees nothing the answer depends on, reflect returns with no LLM call; otherwise the answer "
         'reads only the memories it picked. Word the query as the question to decide ("does my change go '
         'against a recorded decision?"); `context` is what it is about. For callers that act on any text '
-        "they get back, such as an agent's memory watcher that should speak only when memory has "
+        "they get back, such as a live session that should speak only when memory has "
         "something to say.",
     )
     search_queries: list[str] | None = Field(
@@ -8193,11 +8193,11 @@ def _register_routes(app: FastAPI):
         response_model=SessionAppendResponse,
         summary="Append to a live session",
         description=(
-            "Send what happened in a live conversation since the last append, and get back the memory "
-            "watcher's notes. The session is created on its first append.\n\n"
-            "Safe to retry: each event carries the client's own `id`, and an event already stored is "
-            "skipped. Events are stored in the order sent, after the session's earlier events.\n\n"
-            "With `watch` on, each moment worth a check (a request, a plan, a command that changes "
+            "Send the messages of a live session since the last append, and get back Hindsight's notes. "
+            "The session is created on its first append.\n\n"
+            "Safe to retry: each message carries the client's own `id`, and a message already stored is "
+            "skipped. Messages are stored in the order sent, after the session's earlier ones.\n\n"
+            "With `live` on, each moment worth a check (a request, a plan, a command that changes "
             "things, an edit, a failure) queues one reflect in the background. The append never waits "
             "for it: its note comes back with a later append, or from `GET .../events`. `ack` is the "
             "`seq` of the last note this client delivered; the response carries the notes after it."
@@ -8225,8 +8225,8 @@ def _register_routes(app: FastAPI):
         response_model=SessionEventsResponse,
         summary="Read a session's log",
         description=(
-            "The session's log after position `after`, oldest first: the client's events and the "
-            "watcher's checks and notes, in one order. Poll with `after` set to the last `seq` you saw "
+            "The session's log after position `after`, oldest first: the client's messages and "
+            "Hindsight's checks, notes, handoffs and saves, in one order. Poll with `after` set to the last `seq` you saw "
             "to follow the session live."
         ),
         operation_id="list_session_events",

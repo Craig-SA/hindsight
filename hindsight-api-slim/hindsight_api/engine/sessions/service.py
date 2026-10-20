@@ -93,7 +93,6 @@ class ClientEvent(BaseModel):
 
     id: str
     kind: str
-    ts: datetime | None = None
     payload: dict[str, Any]
 
 
@@ -125,16 +124,15 @@ def client_events(request: SessionAppendRequest) -> list[ClientEvent]:
             payload: dict[str, Any] = {"role": "tool", "call_id": m.tool_call_id or "", "text": text}
             if m.is_error:
                 payload["is_error"] = True
-            out.append(ClientEvent(id=m.id, kind="tool_result", ts=m.ts, payload=payload))
+            out.append(ClientEvent(id=m.id, kind="tool_result", payload=payload))
             continue
         if text.strip():
-            out.append(ClientEvent(id=m.id, kind="message", ts=m.ts, payload={"role": m.role, "text": text}))
+            out.append(ClientEvent(id=m.id, kind="message", payload={"role": m.role, "text": text}))
         for c in m.tool_calls or []:
             out.append(
                 ClientEvent(
                     id=f"{m.id}:{c.id}",
                     kind="tool_call",
-                    ts=m.ts,
                     payload={
                         "role": "assistant",
                         "tool": c.function.name,
@@ -145,8 +143,9 @@ def client_events(request: SessionAppendRequest) -> list[ClientEvent]:
             )
     if request.state is not None:
         # The same snapshot sent twice is one entry: nothing changed in between.
-        digest = hashlib.sha1(json.dumps(request.state, sort_keys=True).encode()).hexdigest()[:16]
-        out.append(ClientEvent(id=f"state:{digest}", kind="state", payload={"role": "system", "data": request.state}))
+        data = request.state.model_dump(exclude_none=True)
+        digest = hashlib.sha1(json.dumps(data, sort_keys=True).encode()).hexdigest()[:16]
+        out.append(ClientEvent(id=f"state:{digest}", kind="state", payload={"role": "system", "data": data}))
     return out
 
 
@@ -157,11 +156,11 @@ def default_document_id(session_id: str) -> str:
 def _settings_of(opts: SessionOptions | None, current: dict[str, Any] | None = None) -> dict[str, Any]:
     out = dict(current or {})
     if opts is not None:
-        for key in ("watch", "retain", "tags", "context", "strategy", "observation_scopes"):
+        for key in ("live", "retain", "tags", "context", "strategy", "observation_scopes"):
             value = getattr(opts, key)
             if value is not None:
                 out[key] = value
-    out.setdefault("watch", False)
+    out.setdefault("live", False)
     out.setdefault("retain", "turns")
     return out
 
@@ -334,24 +333,24 @@ class SessionService:
                         )
                     }
                 seq = int(row["next_seq"])
-                rows: list[tuple[int, str, str, datetime | None, str]] = []
+                rows: list[tuple[int, str, str, str]] = []
                 seen: set[str] = set()
                 for event in incoming:
                     if event.id in known or event.id in seen:
                         continue
                     seen.add(event.id)
                     payload = event.payload
-                    if settings["watch"]:
+                    if settings["live"]:
                         step = W.step_of(event.kind, payload["role"], payload)
                         if step is not None:
                             W.read_step(state, step, seq)
-                    rows.append((seq, event.id, event.kind, event.ts, json.dumps(payload)))
+                    rows.append((seq, event.id, event.kind, json.dumps(payload)))
                     seq += 1
                 turn_ended = any(r[2] == "turn_end" for r in rows)
                 if rows:
                     await conn.bulk_insert_from_arrays(
                         fq_table("session_events"),
-                        ["bank_id", "session_id", "seq", "event_id", "source", "kind", "ts", "payload"],
+                        ["bank_id", "session_id", "seq", "event_id", "source", "kind", "payload"],
                         [
                             [bank_id] * len(rows),
                             [session_id] * len(rows),
@@ -360,7 +359,6 @@ class SessionService:
                             ["client"] * len(rows),
                             [r[2] for r in rows],
                             [r[3] for r in rows],
-                            [r[4] for r in rows],
                         ],
                         column_types=[
                             "text[]",
@@ -369,7 +367,6 @@ class SessionService:
                             "text[]",
                             "text[]",
                             "text[]",
-                            "timestamptz[]",
                             "jsonb[]",
                         ],
                     )
@@ -403,11 +400,11 @@ class SessionService:
                 )
                 if notes:
                     await self._hand_off(conn, bank_id, session_id, notes, [r[0] for r in rows])
-                checking = settings["watch"] and _checking(state, row["checking_since"])
+                checking = settings["live"] and _checking(state, row["checking_since"])
         if created_bank:
             await engine._apply_default_bank_template(bank_id, request_context)
         # Only when this append brought something: the moment was queued by the append that made it.
-        if rows and settings["watch"] and state.pending is not None:
+        if rows and settings["live"] and state.pending is not None:
             await self._queue_check(bank_id, session_id, request_context)
         if turn_ended and settings["retain"] == "turns":
             await self._queue_save(bank_id, session_id, request_context)
@@ -457,7 +454,7 @@ class SessionService:
                     await self._hand_off(conn, bank_id, session_id, notes, [])
             return SessionAppendResponse(
                 notes=notes,
-                checking=bool(settings["watch"]) and _checking(state, row["checking_since"]),
+                checking=bool(settings["live"]) and _checking(state, row["checking_since"]),
             )
 
     async def _handed(self, conn: Any, bank_id: str, session_id: str, notes: list[SessionNote]) -> set[str]:
@@ -886,7 +883,7 @@ class SessionService:
                     )
             events = await conn.fetch(
                 f"""
-                SELECT seq, kind, ts, created_at, payload FROM {fq_table("session_events")}
+                SELECT seq, kind, created_at, payload FROM {fq_table("session_events")}
                 WHERE bank_id = $1 AND session_id = $2 AND source = 'client' AND seq > $3 AND seq <= $4
                 ORDER BY seq
                 """,
@@ -895,11 +892,7 @@ class SessionService:
                 plan.from_seq,
                 plan.upto_seq,
             )
-            turns = [
-                t
-                for e in events
-                if (t := _turn(e["kind"], conn.parse_json(e["payload"]) or {}, e["ts"] or e["created_at"]))
-            ]
+            turns = [t for e in events if (t := _turn(e["kind"], conn.parse_json(e["payload"]) or {}, e["created_at"]))]
             settings = _settings_of(None, conn.parse_json(row["settings"]))
             metadata = conn.parse_json(row["metadata"]) or {}
         document_id: str = row["document_id"]
@@ -1017,7 +1010,7 @@ class SessionService:
                 raise SessionNotFoundError(session_id)
             rows = await conn.fetch(
                 f"""
-                SELECT seq, event_id, source, kind, ts, created_at, payload FROM {fq_table("session_events")}
+                SELECT seq, event_id, source, kind, created_at, payload FROM {fq_table("session_events")}
                 WHERE bank_id = $1 AND session_id = $2 AND seq > $3
                 ORDER BY seq
                 LIMIT $4
@@ -1036,14 +1029,12 @@ class SessionService:
                         event_id=r["event_id"],
                         source=r["source"],
                         kind=r["kind"],
-                        ts=r["ts"],
                         created_at=r["created_at"],
                         payload=conn.parse_json(r["payload"]) or {},
                     )
                     for r in rows
                 ],
-                last_seq=int(head["next_seq"]) - 1,
-                checking=bool(settings["watch"]) and _checking(state, head["checking_since"]),
+                checking=bool(settings["live"]) and _checking(state, head["checking_since"]),
             )
 
     def _summary(self, conn: Any, r: Any) -> SessionSummary:
@@ -1052,33 +1043,26 @@ class SessionService:
         return SessionSummary(
             session_id=r["session_id"],
             document_id=r["document_id"],
-            watch=bool(settings["watch"]),
+            live=bool(settings["live"]),
             retain=settings["retain"],
             event_count=int(r["event_count"]),
             check_count=int(r["check_count"]),
             note_count=int(r["note_count"]),
-            delivered_count=int(r["delivered_count"]),
             last_seq=int(r["next_seq"]) - 1,
             saved_seq=int(r["saved_seq"]),
             acked_seq=int(r["acked_seq"]),
-            checking=bool(settings["watch"]) and _checking(state, r["checking_since"]),
+            checking=bool(settings["live"]) and _checking(state, r["checking_since"]),
             created_at=r["created_at"],
-            updated_at=r["updated_at"],
             last_event_at=r["last_event_at"],
             metadata=conn.parse_json(r["metadata"]) or {},
         )
 
     @staticmethod
     def _summary_columns() -> str:
-        # Delivered notes, counted where the client's acknowledgement reached: one indexed range
-        # read per session, so the list can say how many of a session's notes reached the agent.
         return (
             "s.session_id, s.document_id, s.settings, s.metadata, s.watch_state, "
             "s.next_seq, s.saved_seq, s.acked_seq, s.event_count, s.check_count, s.note_count, s.checking_since, "
-            "s.created_at, s.updated_at, s.last_event_at, "
-            f"(SELECT COUNT(*) FROM {fq_table('session_events')} e WHERE e.bank_id = s.bank_id "
-            "AND e.session_id = s.session_id AND e.source = 'hindsight' AND e.kind = 'note' "
-            "AND e.seq <= s.acked_seq) AS delivered_count"
+            "s.created_at, s.last_event_at"
         )
 
     async def get(self, bank_id: str, session_id: str, *, request_context: RequestContext) -> SessionSummary:

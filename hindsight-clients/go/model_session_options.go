@@ -20,7 +20,7 @@ var _ MappedNullable = &SessionOptions{}
 // SessionOptions How the session is set up. Applied when an append creates the session; later appends that carry options update the fields they set.
 type SessionOptions struct {
 	DocumentId NullableString `json:"document_id,omitempty"`
-	Watch NullableBool `json:"watch,omitempty"`
+	Live NullableBool `json:"live,omitempty"`
 	Retain NullableString `json:"retain,omitempty"`
 	Tags []string `json:"tags,omitempty"`
 	Context NullableString `json:"context,omitempty"`
@@ -88,46 +88,46 @@ func (o *SessionOptions) UnsetDocumentId() {
 	o.DocumentId.Unset()
 }
 
-// GetWatch returns the Watch field value if set, zero value otherwise (both if not set or set to explicit null).
-func (o *SessionOptions) GetWatch() bool {
-	if o == nil || IsNil(o.Watch.Get()) {
+// GetLive returns the Live field value if set, zero value otherwise (both if not set or set to explicit null).
+func (o *SessionOptions) GetLive() bool {
+	if o == nil || IsNil(o.Live.Get()) {
 		var ret bool
 		return ret
 	}
-	return *o.Watch.Get()
+	return *o.Live.Get()
 }
 
-// GetWatchOk returns a tuple with the Watch field value if set, nil otherwise
+// GetLiveOk returns a tuple with the Live field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 // NOTE: If the value is an explicit nil, `nil, true` will be returned
-func (o *SessionOptions) GetWatchOk() (*bool, bool) {
+func (o *SessionOptions) GetLiveOk() (*bool, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return o.Watch.Get(), o.Watch.IsSet()
+	return o.Live.Get(), o.Live.IsSet()
 }
 
-// HasWatch returns a boolean if a field has been set.
-func (o *SessionOptions) HasWatch() bool {
-	if o != nil && o.Watch.IsSet() {
+// HasLive returns a boolean if a field has been set.
+func (o *SessionOptions) HasLive() bool {
+	if o != nil && o.Live.IsSet() {
 		return true
 	}
 
 	return false
 }
 
-// SetWatch gets a reference to the given NullableBool and assigns it to the Watch field.
-func (o *SessionOptions) SetWatch(v bool) {
-	o.Watch.Set(&v)
+// SetLive gets a reference to the given NullableBool and assigns it to the Live field.
+func (o *SessionOptions) SetLive(v bool) {
+	o.Live.Set(&v)
 }
-// SetWatchNil sets the value for Watch to be an explicit nil
-func (o *SessionOptions) SetWatchNil() {
-	o.Watch.Set(nil)
+// SetLiveNil sets the value for Live to be an explicit nil
+func (o *SessionOptions) SetLiveNil() {
+	o.Live.Set(nil)
 }
 
-// UnsetWatch ensures that no value is present for Watch, not even an explicit nil
-func (o *SessionOptions) UnsetWatch() {
-	o.Watch.Unset()
+// UnsetLive ensures that no value is present for Live, not even an explicit nil
+func (o *SessionOptions) UnsetLive() {
+	o.Live.Unset()
 }
 
 // GetRetain returns the Retain field value if set, zero value otherwise (both if not set or set to explicit null).
@@ -377,8 +377,8 @@ func (o SessionOptions) ToMap() (map[string]interface{}, error) {
 	if o.DocumentId.IsSet() {
 		toSerialize["document_id"] = o.DocumentId.Get()
 	}
-	if o.Watch.IsSet() {
-		toSerialize["watch"] = o.Watch.Get()
+	if o.Live.IsSet() {
+		toSerialize["live"] = o.Live.Get()
 	}
 	if o.Retain.IsSet() {
 		toSerialize["retain"] = o.Retain.Get()

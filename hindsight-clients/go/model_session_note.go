@@ -19,7 +19,7 @@ import (
 // checks if the SessionNote type satisfies the MappedNullable interface at compile time
 var _ MappedNullable = &SessionNote{}
 
-// SessionNote A note for the agent. What the watcher checked and the memories it used are in the session's event log (the note's `note` entry and its `check`).
+// SessionNote A note for the agent. What Hindsight checked and the memories it used are in the session's event log (the note's `note` entry and its `check`).
 type SessionNote struct {
 	// Its position in the log: acknowledge it by sending it back as `ack`.
 	Seq int32 `json:"seq"`

@@ -97,7 +97,7 @@ Each run works in committed batches under a wall-clock budget. A backlog too lar
 
 ### `session_check`, `session_save` and `session_idle`
 
-A live [session](./sessions) queues these. `session_check` runs the memory watcher's check for the
+A [live session](./sessions) queues these. `session_check` runs Hindsight's check for the
 session's latest moment: it goes back in the queue until the session has settled (a deferral, not
 a failure), runs one reflect, and writes what it found into the session's log. `session_save`
 appends the conversation's new turns to the session's document through retain. `session_idle` is

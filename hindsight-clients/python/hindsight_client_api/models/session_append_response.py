@@ -28,7 +28,7 @@ class SessionAppendResponse(BaseModel):
     SessionAppendResponse
     """ # noqa: E501
     notes: List[SessionNote] = Field(description="Notes after `ack`, oldest first.")
-    checking: StrictBool = Field(description="A watcher check is queued or running: another note may still come.")
+    checking: StrictBool = Field(description="A check is queued or running: another note may still come.")
     __properties: ClassVar[List[str]] = ["notes", "checking"]
 
     model_config = ConfigDict(

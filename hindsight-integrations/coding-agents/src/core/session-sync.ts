@@ -1,7 +1,7 @@
 /**
  * The conversation as a Hindsight session (servers with `POST .../sessions/{id}/events`): the
  * plugin only streams the conversation and hands notes over. Saving the conversation into memory
- * and, with `autoInject: "watch"`, the memory watcher (what a moment is, what the agent was already
+ * and, with `autoInject: "live"`, the live session (what a moment is, what the agent was already
  * told, the reflect question) all happen on the server.
  *
  * One sync reads the transcript's new complete lines, sends them as session messages (plus the
@@ -10,7 +10,7 @@
  * line sent twice is stored once, and the transcript offset only moves once the server took it.
  *
  * On a server without sessions the first sync answers `unsupported`: the Stop hook then writes the
- * conversation back itself (core/retain-hook.ts), and there is no watcher.
+ * conversation back itself (core/retain-hook.ts), and there is no live session.
  */
 import { createHash } from "node:crypto";
 import {
@@ -24,12 +24,12 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { conversationDocument } from "./chat";
-import { watches, type Config } from "./config";
+import { isLive, type Config } from "./config";
 import { resolveRetainScopes, type HindsightClient } from "./hindsight";
 import { buildRetainStamp } from "./retain-stamp";
 import type { EventsOf, SessionMessage, SessionNote, SessionOptions } from "./session-events";
 import { sleep } from "./util";
-import { renderNote, sourceDiff } from "./watch";
+import { renderNote, sourceDiff } from "./live";
 
 /** A crashed or killed holder leaves its lock behind; past this age anyone may take it. */
 const STALE_LOCK_MS = 60_000;
@@ -52,7 +52,7 @@ export interface SessionSyncState {
   diffHash: string;
   /** Whether the session's options were sent (the first append creates the session). */
   opened: boolean;
-  /** The server has no sessions: no watcher, and the plugin writes the conversation back itself. */
+  /** The server has no sessions: no live session, and the plugin writes the conversation back itself. */
   unsupported: boolean;
   /** Prompts the prompt hook already sent, by hash, so the transcript's copy is not sent again. */
   prompts: string[];
@@ -185,7 +185,7 @@ export async function syncSession(args: {
   eventsOf: EventsOf;
   /** How the session is set up; built only for the append that opens it. */
   options: () => SessionOptions;
-  prompt?: { text: string; ts?: string };
+  prompt?: { text: string };
   turnEnd?: boolean;
   /** The turn's final reply, from the Stop hook: the transcript may not hold it yet when the turn
    *  ends (Claude Code writes it after Stop runs), and it is the message that credits memory. */
@@ -209,7 +209,6 @@ export async function syncSession(args: {
         id: `prompt:${h.slice(0, 16)}:${read.offset}`,
         role: "user",
         content: args.prompt.text,
-        ...(args.prompt.ts ? { ts: args.prompt.ts } : {}),
       });
     }
     // The change so far rides along whenever a tool just ran and it moved: the server checks
@@ -272,7 +271,7 @@ export async function syncSession(args: {
 }
 
 /**
- * The session as this plugin sets it up: the watcher on with `autoInject: "watch"`, and the
+ * The session as this plugin sets it up: the live session on with `autoInject: "live"`, and the
  * conversation saved at the end of each turn into the document the plugin has always written
  * (`conversation:<session>`), filed exactly as the plugin's own write-back files it — so a bank
  * reads the same whether the plugin or the session wrote it. `retainSessions: false` turns the
@@ -300,7 +299,7 @@ export function sessionOptions(args: {
   );
   return {
     document_id: doc.documentId,
-    watch: watches(cfg, harness),
+    live: isLive(cfg, harness),
     retain: cfg.retainSessions === false ? "off" : "turns",
     tags: doc.tags,
     metadata: doc.metadata,

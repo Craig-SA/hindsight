@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Sessions API examples for Hindsight (Node.js): live conversations and the memory watcher.
+ * Sessions API examples for Hindsight (Node.js): live sessions.
  * Run: node examples/api/sessions.mjs
  */
 import { HindsightClient, sdk, createClient, createConfig } from '@vectorize-io/hindsight-client';
@@ -26,7 +26,7 @@ const { data: appended } = await sdk.appendSessionEvents({
     client: apiClient,
     path: { bank_id: 'my-bank', session_id: sessionId },
     body: {
-        session: { watch: true, retain: 'turns' },
+        session: { live: true, retain: 'turns' },
         messages: [
             { id: '1', role: 'user', content: 'Half cents round the wrong way.' },
             {
@@ -38,7 +38,7 @@ const { data: appended } = await sdk.appendSessionEvents({
         ],
     },
 });
-console.log(appended.accepted, appended.last_seq, appended.checking);
+console.log(appended.notes, appended.checking);
 // [/docs:sessions-append]
 
 // [docs:sessions-notes]
@@ -81,7 +81,7 @@ const { data: log } = await sdk.listSessionEvents({
 for (const entry of log.items) {
     console.log(entry.seq, entry.source, entry.kind);
 }
-after = log.last_seq; // poll again with this to get only what is new
+after = log.items.at(-1)?.seq ?? after; // poll again from the last entry you saw
 // [/docs:sessions-follow]
 
 // [docs:sessions-list]
@@ -91,7 +91,7 @@ const { data: sessions } = await sdk.listSessions({
     query: { limit: 20 },
 });
 for (const s of sessions.items) {
-    console.log(s.session_id, s.last_event_at, s.note_count, s.delivered_count);
+    console.log(s.session_id, s.last_event_at, s.note_count);
 }
 // [/docs:sessions-list]
 

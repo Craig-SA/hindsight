@@ -16,12 +16,12 @@ explains what happens automatically, which tools you have, and how to configure 
 - **Ingestion builds itself**: on first open, the bank is seeded from recent commit messages and a
   read-only codebase survey; every session start, a background engine tops it up (new commits, new
   conversations) and keeps 5 knowledge pages current. There is NO ingest command to run.
-- **Memory watcher** (default on Claude Code and Codex): nothing is injected up front; a background
-  watcher follows the session and sends a short note only when memory records a decision the
+- **Live session** (default on Claude Code and Codex): nothing is injected up front; Hindsight
+  follows the session live and sends a short note only when memory records a decision the
   request or the work touches. Treat its notes as project requirements.
 - **Session synthesis** (default elsewhere): the first prompt of a session triggers one deep memory
   synthesis (`reflect`) injected into context. `autoInject` switches the source: `pages` (knowledge
-  page search hits), `recall` (recalled observations), `watch` (the watcher), or `none` (nothing
+  page search hits), `recall` (recalled observations), `live` (the live session), or `none` (nothing
   injected; the agent searches the knowledge pages first and reflects only when they are too shallow).
 - **Write-back**: the session transcript is retained into the bank automatically at session end
   (per-turn on opencode; on Claude Code and Codex with a server that has sessions, the Hindsight

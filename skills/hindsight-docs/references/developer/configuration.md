@@ -2605,7 +2605,7 @@ export HINDSIGHT_API_MCP_INSTRUCTIONS="Also store every action you take, includi
 
 ### Sessions
 
-How the memory watcher paces its checks on a live [session](./api/sessions.md). Static (server-level).
+How Hindsight paces its checks on a [live session](./api/sessions.md). Static (server-level).
 
 | Variable | Description | Default |
 |----------|-------------|---------|

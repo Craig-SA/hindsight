@@ -3968,7 +3968,7 @@
           "Sessions"
         ],
         "summary": "Append to a live session",
-        "description": "Send what happened in a live conversation since the last append, and get back the memory watcher's notes. The session is created on its first append.\n\nSafe to retry: each event carries the client's own `id`, and an event already stored is skipped. Events are stored in the order sent, after the session's earlier events.\n\nWith `watch` on, each moment worth a check (a request, a plan, a command that changes things, an edit, a failure) queues one reflect in the background. The append never waits for it: its note comes back with a later append, or from `GET .../events`. `ack` is the `seq` of the last note this client delivered; the response carries the notes after it.",
+        "description": "Send the messages of a live session since the last append, and get back Hindsight's notes. The session is created on its first append.\n\nSafe to retry: each message carries the client's own `id`, and a message already stored is skipped. Messages are stored in the order sent, after the session's earlier ones.\n\nWith `live` on, each moment worth a check (a request, a plan, a command that changes things, an edit, a failure) queues one reflect in the background. The append never waits for it: its note comes back with a later append, or from `GET .../events`. `ack` is the `seq` of the last note this client delivered; the response carries the notes after it.",
         "operationId": "append_session_events",
         "parameters": [
           {
@@ -4046,7 +4046,7 @@
           "Sessions"
         ],
         "summary": "Read a session's log",
-        "description": "The session's log after position `after`, oldest first: the client's events and the watcher's checks and notes, in one order. Poll with `after` set to the last `seq` you saw to follow the session live.",
+        "description": "The session's log after position `after`, oldest first: the client's messages and Hindsight's checks, notes, handoffs and saves, in one order. Poll with `after` set to the last `seq` you saw to follow the session live.",
         "operationId": "list_session_events",
         "parameters": [
           {
@@ -19064,7 +19064,7 @@
           "abstain": {
             "type": "boolean",
             "title": "Abstain",
-            "description": "Allow an empty answer. When memory holds nothing that answers the query, the response has an empty `text` and `abstained: true`, instead of reflect searching on or failing. With a decision model, it is asked the query itself about the `context` and the best memories found: when it sees nothing the answer depends on, reflect returns with no LLM call; otherwise the answer reads only the memories it picked. Word the query as the question to decide (\"does my change go against a recorded decision?\"); `context` is what it is about. For callers that act on any text they get back, such as an agent's memory watcher that should speak only when memory has something to say.",
+            "description": "Allow an empty answer. When memory holds nothing that answers the query, the response has an empty `text` and `abstained: true`, instead of reflect searching on or failing. With a decision model, it is asked the query itself about the `context` and the best memories found: when it sees nothing the answer depends on, reflect returns with no LLM call; otherwise the answer reads only the memories it picked. Word the query as the question to decide (\"does my change go against a recorded decision?\"); `context` is what it is about. For callers that act on any text they get back, such as a live session that should speak only when memory has something to say.",
             "default": false
           },
           "search_queries": {
@@ -19655,15 +19655,13 @@
           "state": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/SessionState"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "State",
-            "description": "A snapshot of the work after these messages, said by no one: for a coding agent `{\"diff\": \"...\"}`, the `git diff` of everything it changed so far. The watcher judges an edit against it. Never saved into memory."
+            "description": "A snapshot of the work after these messages, said by no one. Never saved into memory."
           },
           "turn_end": {
             "type": "boolean",
@@ -19711,7 +19709,7 @@
           "checking": {
             "type": "boolean",
             "title": "Checking",
-            "description": "A watcher check is queued or running: another note may still come."
+            "description": "A check is queued or running: another note may still come."
           }
         },
         "type": "object",
@@ -19738,23 +19736,11 @@
               "hindsight"
             ],
             "title": "Source",
-            "description": "`client`: an event the client sent. `hindsight`: Hindsight's own entry: a watcher `check`, a `note`, or a `save` of the conversation into its document."
+            "description": "`client`: an event the client sent. `hindsight`: Hindsight's own entry: a `check`, a `note`, or a `save` of the conversation into its document."
           },
           "kind": {
             "type": "string",
             "title": "Kind"
-          },
-          "ts": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ts"
           },
           "created_at": {
             "type": "string",
@@ -19785,12 +19771,8 @@
               "$ref": "#/components/schemas/SessionEvent"
             },
             "type": "array",
-            "title": "Items"
-          },
-          "last_seq": {
-            "type": "integer",
-            "title": "Last Seq",
-            "description": "The log's last position now: poll again with `after` set to it."
+            "title": "Items",
+            "description": "Oldest first: poll again with `after` set to the last `seq`."
           },
           "checking": {
             "type": "boolean",
@@ -19800,7 +19782,6 @@
         "type": "object",
         "required": [
           "items",
-          "last_seq",
           "checking"
         ],
         "title": "SessionEventsResponse"
@@ -19906,19 +19887,6 @@
             "title": "Is Error",
             "description": "On a `tool` message: the tool failed.",
             "default": false
-          },
-          "ts": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ts",
-            "description": "When it happened, by the client's clock."
           }
         },
         "type": "object",
@@ -19957,7 +19925,7 @@
           "text"
         ],
         "title": "SessionNote",
-        "description": "A note for the agent. What the watcher checked and the memories it used are in the session's\nevent log (the note's `note` entry and its `check`)."
+        "description": "A note for the agent. What Hindsight checked and the memories it used are in the session's\nevent log (the note's `note` entry and its `check`)."
       },
       "SessionNoteSource": {
         "properties": {
@@ -20006,7 +19974,7 @@
             "title": "Document Id",
             "description": "The document the conversation is saved into. Defaults to `session:<session_id>`. Fixed once the session exists."
           },
-          "watch": {
+          "live": {
             "anyOf": [
               {
                 "type": "boolean"
@@ -20015,8 +19983,8 @@
                 "type": "null"
               }
             ],
-            "title": "Watch",
-            "description": "Whether the memory watcher follows the session and may send notes back. Off by default."
+            "title": "Live",
+            "description": "Hindsight follows the session live and may send notes back when memory records a decision the work goes against. Off by default: the session is only saved."
           },
           "retain": {
             "anyOf": [
@@ -20123,6 +20091,24 @@
         "title": "SessionOptions",
         "description": "How the session is set up. Applied when an append creates the session; later appends that\ncarry options update the fields they set."
       },
+      "SessionState": {
+        "properties": {
+          "diff": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diff",
+            "description": "For a coding agent: the `git diff` of everything it changed so far. An edit is checked against it."
+          }
+        },
+        "type": "object",
+        "title": "SessionState"
+      },
       "SessionSummary": {
         "properties": {
           "session_id": {
@@ -20133,9 +20119,9 @@
             "type": "string",
             "title": "Document Id"
           },
-          "watch": {
+          "live": {
             "type": "boolean",
-            "title": "Watch"
+            "title": "Live"
           },
           "retain": {
             "type": "string",
@@ -20152,11 +20138,6 @@
           "note_count": {
             "type": "integer",
             "title": "Note Count"
-          },
-          "delivered_count": {
-            "type": "integer",
-            "title": "Delivered Count",
-            "description": "Notes the client acknowledged delivering to the agent."
           },
           "last_seq": {
             "type": "integer",
@@ -20178,11 +20159,6 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Updated At"
           },
           "last_event_at": {
             "anyOf": [
@@ -20207,18 +20183,16 @@
         "required": [
           "session_id",
           "document_id",
-          "watch",
+          "live",
           "retain",
           "event_count",
           "check_count",
           "note_count",
-          "delivered_count",
           "last_seq",
           "saved_seq",
           "acked_seq",
           "checking",
-          "created_at",
-          "updated_at"
+          "created_at"
         ],
         "title": "SessionSummary"
       },

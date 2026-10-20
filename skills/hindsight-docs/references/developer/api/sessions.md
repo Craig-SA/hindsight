@@ -1,9 +1,9 @@
 
-# Sessions
+# Live sessions
 
-A **session** is one live conversation that your client streams into a bank while it happens: a
+A **live session** is one conversation that your client streams into a bank while it happens: a
 coding agent's run, a support chat, an assistant's day. Hindsight keeps it as a log, saves it into
-memory at the end of each turn, and, with the **memory watcher** on, sends notes back when memory
+memory at the end of each turn, and, with `live` on, follows it and sends notes back when memory
 holds something the agent must hear right now.
 
 It turns retain and reflect into a three-way conversation: the user, your agent, and Hindsight
@@ -43,7 +43,7 @@ Your client does one thing: after something happens, it sends the new messages.
 - **Append.** `POST /v1/default/banks/{bank_id}/sessions/{session_id}/events` with the messages since
   your last append. The first append creates the session. The response comes back in milliseconds
   and carries any notes waiting for you.
-- **Watch.** With `watch` on, each moment worth a look (a new request, a plan, a command that changes
+- **Follow.** With `live` on, each moment worth a look (a new request, a plan, a command that changes
   things, a file edit, a failure) queues one memory check in the background. Your append never waits
   for it. A check runs one [reflect](./reflect.md) with `abstain`: most moments end silently, and a note is
   written only when memory records a decision the moment does not state or goes against.
@@ -79,7 +79,7 @@ r = await client.sessions.append_session_events(
     "my-bank",
     session_id,
     SessionAppendRequest.from_dict({
-        "session": {"watch": True, "retain": "turns"},
+        "session": {"live": True, "retain": "turns"},
         "messages": [
             {"id": "1", "role": "user", "content": "Half cents round the wrong way."},
             {"id": "2", "role": "assistant", "tool_calls": [{
@@ -90,7 +90,7 @@ r = await client.sessions.append_session_events(
         ],
     }),
 )
-print(r.accepted, r.last_seq, r.checking)
+print(r.notes, r.checking)
 ```
 
 ### Node.js
@@ -103,7 +103,7 @@ const { data: appended } = await sdk.appendSessionEvents({
     client: apiClient,
     path: { bank_id: 'my-bank', session_id: sessionId },
     body: {
-        session: { watch: true, retain: 'turns' },
+        session: { live: true, retain: 'turns' },
         messages: [
             { id: '1', role: 'user', content: 'Half cents round the wrong way.' },
             {
@@ -115,7 +115,7 @@ const { data: appended } = await sdk.appendSessionEvents({
         ],
     },
 });
-console.log(appended.accepted, appended.last_seq, appended.checking);
+console.log(appended.notes, appended.checking);
 ```
 
 ### CLI
@@ -123,7 +123,7 @@ console.log(appended.accepted, appended.last_seq, appended.checking);
 ```bash
 # One message from the flags; --id makes a retry store nothing twice. The first append creates the session.
 hindsight session append my-bank "$SESSION_ID" --id 1 --role user --text "Half cents round the wrong way." \
-  --watch --retain turns
+  --live --retain turns
 
 # Several messages at once (tool calls too), from a JSON array of OpenAI-style messages.
 hindsight session append my-bank "$SESSION_ID" --messages-file "$MESSAGES_FILE"
@@ -136,8 +136,7 @@ hindsight session append my-bank "$SESSION_ID" --messages-file "$MESSAGES_FILE"
 // keeps already, each with your own id: sending one again (a retry after a lost response)
 // stores nothing twice. The first append creates the session.
 opts := hindsight.NewSessionOptions()
-opts.SetTitle("Fix the rounding bug")
-opts.SetWatch(true)
+opts.SetLive(true)
 opts.SetRetain("turns")
 
 text := func(s string) hindsight.Content1 { return hindsight.Content1{String: &s} }
@@ -159,7 +158,7 @@ appended, _, err := client.SessionsAPI.AppendSessionEvents(ctx, "my-bank", sessi
 if err != nil {
 	log.Fatalf("append: %v", err)
 }
-fmt.Println(appended.Accepted, appended.LastSeq, appended.Checking)
+fmt.Println(appended.Notes, appended.Checking)
 ```
 
 Messages are in the OpenAI chat format most agents already keep, plus your own `id` per message
@@ -171,16 +170,14 @@ Messages are in the OpenAI chat format most agents already keep, plus your own `
 | The assistant calling tools | `role: assistant`, `tool_calls`: `[{id, type: "function", function: {name, arguments}}]` (`arguments` a JSON string or object) |
 | What a tool returned | `role: tool`, `tool_call_id`, `content`, `is_error` |
 
-Each message may carry `ts`, when it happened by your clock. Up to 500 messages per append. Two more
-fields of the append:
+Up to 500 messages per append. Two more fields of the append:
 
-- `state`: a snapshot of the work, said by no one. For a coding agent `{"diff": "..."}`, the
-  `git diff` of everything it changed so far: the watcher judges an edit against the whole change.
-  Never saved into memory.
+- `state`: a snapshot of the work, said by no one: `{"diff": "..."}`, the `git diff` of everything a
+  coding agent changed so far. An edit is checked against the whole change. Never saved into memory.
 - `turn_end: true`: the assistant finished its turn. Sent again with nothing new in between, it is
   the same turn end.
 
-The watcher recognizes tools by what their names say, whichever agent named them: an edit (`Edit`,
+Hindsight recognizes tools by what their names say, whichever agent named them: an edit (`Edit`,
 `apply_patch`, `write_file`, `patch`), a command (`Bash`, `shell`, `terminal`), or anything else.
 
 ### Session options
@@ -190,7 +187,7 @@ carry options update what they set.
 
 | Option | Meaning | Default |
 |---|---|---|
-| `watch` | The memory watcher follows the session and may send notes | `false` |
+| `live` | Hindsight follows the session and may send notes back; off, the session is only saved | `false` |
 | `retain` | When the conversation is saved: `turns` (each turn end, and when idle), `idle` (only when idle: one extraction for the whole session), or `off` | `turns` |
 | `document_id` | The document it is saved into; fixed once the session exists | `session:<session_id>` |
 | `metadata` | Labels, copied onto the saved document. `harness` names the client (e.g. `claude-code`) and the Control Plane shows its logo | — |
@@ -263,7 +260,7 @@ it. What caused a note and the memories it used are in the session's log (its `c
 `checking` is `true` while a check is queued or running: another note may still come, so a client at
 the end of a turn can poll a little longer.
 
-The watcher's rules: it waits for the session to settle before checking (a plan and the command
+The rules for notes: Hindsight waits for the session to settle before checking (a plan and the command
 right after it are one check), never says the same memory twice, judges the same situation once,
 and sends at most three notes per session.
 
@@ -339,7 +336,7 @@ after = 0
 log = await client.sessions.list_session_events("my-bank", session_id, after=after)
 for entry in log.items:
     print(entry.seq, entry.source, entry.kind)
-after = log.last_seq  # poll again with this to get only what is new
+after = log.items[-1].seq if log.items else after  # poll again from the last entry you saw
 ```
 
 ### Node.js
@@ -355,7 +352,7 @@ const { data: log } = await sdk.listSessionEvents({
 for (const entry of log.items) {
     console.log(entry.seq, entry.source, entry.kind);
 }
-after = log.last_seq; // poll again with this to get only what is new
+after = log.items.at(-1)?.seq ?? after; // poll again from the last entry you saw
 ```
 
 ### CLI
@@ -376,13 +373,13 @@ if err != nil {
 for _, entry := range entries.Items {
 	fmt.Println(entry.Seq, entry.Source, entry.Kind)
 }
-// poll again with After(entries.LastSeq) to get only what is new
+// poll again with After(<the last entry's Seq>) to get only what is new
 ```
 
 Each log entry has a `seq`, a `source` (`client` or `hindsight`), a `kind` and a `payload`.
 Hindsight's entries:
 
-- `check`: one watcher check: the `trigger`, the `outcome` (`note`, `silent`, `repeat` when the
+- `check`: one check of a moment: the `trigger`, the `outcome` (`note`, `silent`, `repeat` when the
   memory was already told, `skipped`, `error`), how long it took, and everything sent to reflect
   (`question`, `context`, `search_queries`) with its decision path (`llm_calls`) and tokens.
 - `note`: a note sent back, with `check_seq` pointing at its check.
@@ -397,7 +394,7 @@ Hindsight's entries:
 ```python
 sessions = await client.sessions.list_sessions("my-bank", limit=20)
 for s in sessions.items:
-    print(s.session_id, s.last_event_at, s.note_count, s.delivered_count)
+    print(s.session_id, s.last_event_at, s.note_count)
 ```
 
 ### Node.js
@@ -409,7 +406,7 @@ const { data: sessions } = await sdk.listSessions({
     query: { limit: 20 },
 });
 for (const s of sessions.items) {
-    console.log(s.session_id, s.last_event_at, s.note_count, s.delivered_count);
+    console.log(s.session_id, s.last_event_at, s.note_count);
 }
 ```
 
@@ -427,7 +424,7 @@ if err != nil {
 	log.Fatalf("list: %v", err)
 }
 for _, s := range sessions.Items {
-	fmt.Println(s.SessionId, s.GetLastEventAt(), s.NoteCount, s.DeliveredCount)
+	fmt.Println(s.SessionId, s.GetLastEventAt(), s.NoteCount)
 }
 ```
 
@@ -465,8 +462,8 @@ if _, _, err := client.SessionsAPI.DeleteSession(ctx, "my-bank", sessionID).Exec
 
 Sessions go through the same extension hooks as other bank reads and writes
 (`append_session_events`, `delete_session`; `list_sessions`, `get_session`,
-`list_session_events`). A caller confined to a tag scope is refused (`403`): the watcher's checks
-search the whole bank, so its notes could carry memories outside the caller's tags.
+`list_session_events`). A caller confined to a tag scope is refused (`403`): the checks search the
+whole bank, so the notes could carry memories outside the caller's tags.
 
 ## Configuration
 
@@ -479,5 +476,5 @@ search the whole bank, so its notes could carry memories outside the caller's ta
 The checks use reflect's [decision model](../configuration.md#decision-model) when one is set: most
 moments are then settled without an LLM call.
 
-The coding-agents plugin uses sessions for its memory watcher on Claude Code and Codex (see
+The coding-agents plugin streams every Claude Code and Codex session into a live session (see
 [Coding Agents](../../sdks/integrations/coding-agents.md)).

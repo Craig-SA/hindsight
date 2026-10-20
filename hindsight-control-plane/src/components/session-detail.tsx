@@ -616,7 +616,7 @@ function SessionHeader({
   const end = session
     ? live
       ? now
-      : Date.parse(session.last_event_at ?? session.updated_at)
+      : Date.parse(session.last_event_at ?? session.created_at)
     : now;
   const duration = session ? Math.max(0, end - Date.parse(session.created_at)) : 0;
   const savedPct =
@@ -690,7 +690,7 @@ function SessionHeader({
           <Stat
             label={t("statNotes")}
             value={String(session.note_count)}
-            hint={session.watch ? t("watchOnLong") : t("watchOffLong")}
+            hint={session.live ? t("liveOnLong") : t("liveOffLong")}
             accent={session.note_count > 0}
           />
           <div className="min-w-0 rounded-xl border border-border/60 bg-card px-3 py-2">
@@ -846,7 +846,7 @@ function ActivityLog({
               {t("savedUpTo", { saved: session.saved_seq, total: session.last_seq })}
             </span>
           )}
-          <span>{session.watch ? t("watchOnLong") : t("watchOffLong")}</span>
+          <span>{session.live ? t("liveOnLong") : t("liveOffLong")}</span>
           {checking && <span className="text-primary">{t("checkingLong")}</span>}
         </div>
       )}
@@ -2238,7 +2238,7 @@ function NoteCard({
   );
 }
 
-/** A typing indicator for the third voice: shown while a watcher check runs. */
+/** A typing indicator for the third voice: shown while a live-session check runs. */
 function CheckingIndicator({ t }: { t: Translate }) {
   return (
     <div className="mt-3 flex items-center gap-2.5 animate-soft-fade-in">

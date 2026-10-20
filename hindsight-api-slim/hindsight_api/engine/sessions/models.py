@@ -53,7 +53,6 @@ class SessionMessage(BaseModel):
         default=None, max_length=256, description="On a `tool` message: the call it answers."
     )
     is_error: bool = Field(default=False, description="On a `tool` message: the tool failed.")
-    ts: datetime | None = Field(default=None, description="When it happened, by the client's clock.")
 
 
 class SessionOptions(BaseModel):
@@ -66,9 +65,10 @@ class SessionOptions(BaseModel):
         description="The document the conversation is saved into. Defaults to `session:<session_id>`. "
         "Fixed once the session exists.",
     )
-    watch: bool | None = Field(
+    live: bool | None = Field(
         default=None,
-        description="Whether the memory watcher follows the session and may send notes back. Off by default.",
+        description="Hindsight follows the session live and may send notes back when memory records a decision "
+        "the work goes against. Off by default: the session is only saved.",
     )
     retain: Literal["turns", "idle", "off"] | None = Field(
         default=None,
@@ -96,13 +96,19 @@ class SessionOptions(BaseModel):
     )
 
 
+class SessionState(BaseModel):
+    diff: str | None = Field(
+        default=None,
+        description="For a coding agent: the `git diff` of everything it changed so far. An edit is checked "
+        "against it.",
+    )
+
+
 class SessionAppendRequest(BaseModel):
     messages: list[SessionMessage] = Field(default_factory=list, max_length=MAX_MESSAGES_PER_APPEND)
-    state: dict[str, Any] | None = Field(
+    state: SessionState | None = Field(
         default=None,
-        description="A snapshot of the work after these messages, said by no one: for a coding agent "
-        '`{"diff": "..."}`, the `git diff` of everything it changed so far. The watcher judges an edit '
-        "against it. Never saved into memory.",
+        description="A snapshot of the work after these messages, said by no one. Never saved into memory.",
     )
     turn_end: bool = Field(
         default=False,
@@ -127,7 +133,7 @@ class SessionNoteSource(BaseModel):
 
 
 class SessionNote(BaseModel):
-    """A note for the agent. What the watcher checked and the memories it used are in the session's
+    """A note for the agent. What Hindsight checked and the memories it used are in the session's
     event log (the note's `note` entry and its `check`)."""
 
     seq: int = Field(description="Its position in the log: acknowledge it by sending it back as `ack`.")
@@ -137,43 +143,39 @@ class SessionNote(BaseModel):
 
 class SessionAppendResponse(BaseModel):
     notes: list[SessionNote] = Field(description="Notes after `ack`, oldest first.")
-    checking: bool = Field(description="A watcher check is queued or running: another note may still come.")
+    checking: bool = Field(description="A check is queued or running: another note may still come.")
 
 
 class SessionEvent(BaseModel):
     seq: int
     event_id: str
     source: Literal["client", "hindsight"] = Field(
-        description="`client`: an event the client sent. `hindsight`: Hindsight's own entry: a watcher "
+        description="`client`: an event the client sent. `hindsight`: Hindsight's own entry: a "
         "`check`, a `note`, or a `save` of the conversation into its document."
     )
     kind: str
-    ts: datetime | None = None
     created_at: datetime
     payload: dict[str, Any]
 
 
 class SessionEventsResponse(BaseModel):
-    items: list[SessionEvent]
-    last_seq: int = Field(description="The log's last position now: poll again with `after` set to it.")
+    items: list[SessionEvent] = Field(description="Oldest first: poll again with `after` set to the last `seq`.")
     checking: bool
 
 
 class SessionSummary(BaseModel):
     session_id: str
     document_id: str
-    watch: bool
+    live: bool
     retain: str
     event_count: int
     check_count: int
     note_count: int
-    delivered_count: int = Field(description="Notes the client acknowledged delivering to the agent.")
     last_seq: int
     saved_seq: int
     acked_seq: int
     checking: bool
     created_at: datetime
-    updated_at: datetime
     last_event_at: datetime | None = Field(default=None, description="When the client last sent an event.")
     metadata: dict[str, Any] = Field(default_factory=dict)
 

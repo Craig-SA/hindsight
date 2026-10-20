@@ -27,8 +27,7 @@ func main() {
 	// keeps already, each with your own id: sending one again (a retry after a lost response)
 	// stores nothing twice. The first append creates the session.
 	opts := hindsight.NewSessionOptions()
-	opts.SetTitle("Fix the rounding bug")
-	opts.SetWatch(true)
+	opts.SetLive(true)
 	opts.SetRetain("turns")
 
 	text := func(s string) hindsight.Content1 { return hindsight.Content1{String: &s} }
@@ -50,7 +49,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("append: %v", err)
 	}
-	fmt.Println(appended.Accepted, appended.LastSeq, appended.Checking)
+	fmt.Println(appended.Notes, appended.Checking)
 	// [/docs:sessions-append]
 
 	// [docs:sessions-notes]
@@ -94,7 +93,7 @@ func main() {
 	for _, entry := range entries.Items {
 		fmt.Println(entry.Seq, entry.Source, entry.Kind)
 	}
-	// poll again with After(entries.LastSeq) to get only what is new
+	// poll again with After(<the last entry's Seq>) to get only what is new
 	// [/docs:sessions-follow]
 
 	// [docs:sessions-list]
@@ -103,7 +102,7 @@ func main() {
 		log.Fatalf("list: %v", err)
 	}
 	for _, s := range sessions.Items {
-		fmt.Println(s.SessionId, s.GetLastEventAt(), s.NoteCount, s.DeliveredCount)
+		fmt.Println(s.SessionId, s.GetLastEventAt(), s.NoteCount)
 	}
 	// [/docs:sessions-list]
 

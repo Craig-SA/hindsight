@@ -19,13 +19,12 @@ export interface SessionMessage {
   tool_calls?: { id: string; type: "function"; function: { name: string; arguments: string } }[];
   tool_call_id?: string;
   is_error?: boolean;
-  ts?: string;
 }
 
 /** How the session is set up (sent with the first append; see the server's SessionOptions). */
 export interface SessionOptions {
   document_id?: string;
-  watch?: boolean;
+  live?: boolean;
   retain?: "turns" | "idle" | "off";
   tags?: string[];
   metadata?: Record<string, string>;
@@ -38,7 +37,7 @@ export interface SessionOptions {
  *  this client handed over. */
 export interface SessionAppend {
   messages: SessionMessage[];
-  state?: { diff: string };
+  state?: { diff?: string };
   turn_end?: boolean;
   ack: number;
   session?: SessionOptions;
@@ -100,10 +99,8 @@ export const claudeEventsOf: EventsOf = (line, offset) => {
   const msg = line.message as { content?: unknown } | undefined;
   const content = msg && typeof msg === "object" ? msg.content : undefined;
   const base = typeof line.uuid === "string" && line.uuid ? line.uuid : `o${offset}`;
-  const ts = typeof line.timestamp === "string" ? line.timestamp : undefined;
   const out: SessionMessage[] = [];
-  const push = (m: Omit<SessionMessage, "id" | "ts">) =>
-    out.push({ id: `${base}:${out.length}`, ...m, ...(ts ? { ts } : {}) });
+  const push = (m: Omit<SessionMessage, "id">) => out.push({ id: `${base}:${out.length}`, ...m });
   const said = (role: "user" | "assistant", text: string) =>
     push({ role, content: cap(stripInjectedMemory(text), MESSAGE_CAP) });
   if (line.type === "assistant" && Array.isArray(content)) {
@@ -138,18 +135,16 @@ function codexCommand(item: Record<string, unknown>): string {
 }
 
 /** Codex: the finished items of its rollout (prompt, agent message, shell command, file change),
- *  read as Claude's Bash and Edit so the watcher judges both with one set of rules. */
+ *  read as Claude's Bash and Edit so the live session judges both with one set of rules. */
 export const codexEventsOf: EventsOf = (line, offset) => {
   const p = (line.payload ?? {}) as Record<string, unknown>;
   if (line.type !== "event_msg" || p.type !== "item_completed") return [];
   const item = (p.item ?? {}) as Record<string, unknown>;
   const callId = String(item.id ?? `o${offset}`);
   const base = `${callId}@${offset}`;
-  const ts = typeof line.timestamp === "string" ? line.timestamp : undefined;
-  const msg = (i: number, m: Omit<SessionMessage, "id" | "ts">): SessionMessage => ({
+  const msg = (i: number, m: Omit<SessionMessage, "id">): SessionMessage => ({
     id: `${base}:${i}`,
     ...m,
-    ...(ts ? { ts } : {}),
   });
   const result = (output: unknown, failed: boolean): SessionMessage =>
     msg(1, {
@@ -190,8 +185,8 @@ export const codexEventsOf: EventsOf = (line, offset) => {
 };
 
 /** The harnesses whose transcript the plugin reads into a session, and the built entry file of
- *  each one's memory watcher hook (core/watch-entry.ts), which it also starts detached. */
+ *  each one's live session hook (core/live-entry.ts), which it also starts detached. */
 export const SESSION_HARNESSES: Record<string, { entry: string; eventsOf: EventsOf }> = {
-  "claude-code": { entry: "claude-watch-hook.js", eventsOf: claudeEventsOf },
-  codex: { entry: "codex-watch-hook.js", eventsOf: codexEventsOf },
+  "claude-code": { entry: "claude-live-hook.js", eventsOf: claudeEventsOf },
+  codex: { entry: "codex-live-hook.js", eventsOf: codexEventsOf },
 };

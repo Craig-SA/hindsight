@@ -23,7 +23,7 @@ var _ MappedNullable = &SessionAppendResponse{}
 type SessionAppendResponse struct {
 	// Notes after `ack`, oldest first.
 	Notes []SessionNote `json:"notes"`
-	// A watcher check is queued or running: another note may still come.
+	// A check is queued or running: another note may still come.
 	Checking bool `json:"checking"`
 }
 

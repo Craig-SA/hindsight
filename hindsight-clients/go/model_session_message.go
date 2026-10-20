@@ -12,7 +12,6 @@ package hindsight
 
 import (
 	"encoding/json"
-	"time"
 	"bytes"
 	"fmt"
 )
@@ -30,7 +29,6 @@ type SessionMessage struct {
 	ToolCallId NullableString `json:"tool_call_id,omitempty"`
 	// On a `tool` message: the tool failed.
 	IsError *bool `json:"is_error,omitempty"`
-	Ts NullableTime `json:"ts,omitempty"`
 }
 
 type _SessionMessage SessionMessage
@@ -255,48 +253,6 @@ func (o *SessionMessage) SetIsError(v bool) {
 	o.IsError = &v
 }
 
-// GetTs returns the Ts field value if set, zero value otherwise (both if not set or set to explicit null).
-func (o *SessionMessage) GetTs() time.Time {
-	if o == nil || IsNil(o.Ts.Get()) {
-		var ret time.Time
-		return ret
-	}
-	return *o.Ts.Get()
-}
-
-// GetTsOk returns a tuple with the Ts field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-// NOTE: If the value is an explicit nil, `nil, true` will be returned
-func (o *SessionMessage) GetTsOk() (*time.Time, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return o.Ts.Get(), o.Ts.IsSet()
-}
-
-// HasTs returns a boolean if a field has been set.
-func (o *SessionMessage) HasTs() bool {
-	if o != nil && o.Ts.IsSet() {
-		return true
-	}
-
-	return false
-}
-
-// SetTs gets a reference to the given NullableTime and assigns it to the Ts field.
-func (o *SessionMessage) SetTs(v time.Time) {
-	o.Ts.Set(&v)
-}
-// SetTsNil sets the value for Ts to be an explicit nil
-func (o *SessionMessage) SetTsNil() {
-	o.Ts.Set(nil)
-}
-
-// UnsetTs ensures that no value is present for Ts, not even an explicit nil
-func (o *SessionMessage) UnsetTs() {
-	o.Ts.Unset()
-}
-
 func (o SessionMessage) MarshalJSON() ([]byte, error) {
 	toSerialize,err := o.ToMap()
 	if err != nil {
@@ -320,9 +276,6 @@ func (o SessionMessage) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.IsError) {
 		toSerialize["is_error"] = o.IsError
-	}
-	if o.Ts.IsSet() {
-		toSerialize["ts"] = o.Ts.Get()
 	}
 	return toSerialize, nil
 }

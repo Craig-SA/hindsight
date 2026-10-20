@@ -737,6 +737,7 @@ export type {
   SessionNote,
   SessionNoteSource,
   SessionOptions,
+  SessionState,
   SessionSummary,
   SetBankAliasPrimaryData,
   SetBankAliasPrimaryError,

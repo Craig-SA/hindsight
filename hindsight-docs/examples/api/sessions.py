@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sessions API examples for Hindsight (live conversations and the memory watcher).
+Sessions API examples for Hindsight (live sessions).
 Run: python examples/api/sessions.py
 """
 import asyncio
@@ -28,7 +28,7 @@ async def main() -> None:
         "my-bank",
         session_id,
         SessionAppendRequest.from_dict({
-            "session": {"watch": True, "retain": "turns"},
+            "session": {"live": True, "retain": "turns"},
             "messages": [
                 {"id": "1", "role": "user", "content": "Half cents round the wrong way."},
                 {"id": "2", "role": "assistant", "tool_calls": [{
@@ -39,7 +39,7 @@ async def main() -> None:
             ],
         }),
     )
-    print(r.accepted, r.last_seq, r.checking)
+    print(r.notes, r.checking)
     # [/docs:sessions-append]
 
     # [docs:sessions-notes]
@@ -75,13 +75,13 @@ async def main() -> None:
     log = await client.sessions.list_session_events("my-bank", session_id, after=after)
     for entry in log.items:
         print(entry.seq, entry.source, entry.kind)
-    after = log.last_seq  # poll again with this to get only what is new
+    after = log.items[-1].seq if log.items else after  # poll again from the last entry you saw
     # [/docs:sessions-follow]
 
     # [docs:sessions-list]
     sessions = await client.sessions.list_sessions("my-bank", limit=20)
     for s in sessions.items:
-        print(s.session_id, s.last_event_at, s.note_count, s.delivered_count)
+        print(s.session_id, s.last_event_at, s.note_count)
     # [/docs:sessions-list]
 
 

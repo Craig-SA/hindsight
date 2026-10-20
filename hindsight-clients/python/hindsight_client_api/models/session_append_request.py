@@ -22,6 +22,7 @@ from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
 from hindsight_client_api.models.session_message import SessionMessage
 from hindsight_client_api.models.session_options import SessionOptions
+from hindsight_client_api.models.session_state import SessionState
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -30,7 +31,7 @@ class SessionAppendRequest(BaseModel):
     SessionAppendRequest
     """ # noqa: E501
     messages: Optional[Annotated[List[SessionMessage], Field(max_length=500)]] = None
-    state: Optional[Dict[str, Any]] = None
+    state: Optional[SessionState] = None
     turn_end: Optional[StrictBool] = Field(default=False, description="The assistant finished its turn after these messages: the turn is saved into memory (with `retain: turns`). Sent again with nothing new in between, it is the same turn end.")
     ack: Optional[Annotated[int, Field(strict=True, ge=0)]] = None
     session: Optional[SessionOptions] = None
@@ -82,6 +83,9 @@ class SessionAppendRequest(BaseModel):
                 if _item_messages:
                     _items.append(_item_messages.to_dict())
             _dict['messages'] = _items
+        # override the default output from pydantic by calling `to_dict()` of state
+        if self.state:
+            _dict['state'] = self.state.to_dict()
         # override the default output from pydantic by calling `to_dict()` of session
         if self.session:
             _dict['session'] = self.session.to_dict()
@@ -113,7 +117,7 @@ class SessionAppendRequest(BaseModel):
 
         _obj = cls.model_validate({
             "messages": [SessionMessage.from_dict(_item) for _item in obj["messages"]] if obj.get("messages") is not None else None,
-            "state": obj.get("state"),
+            "state": SessionState.from_dict(obj["state"]) if obj.get("state") is not None else None,
             "turn_end": obj.get("turn_end") if obj.get("turn_end") is not None else False,
             "ack": obj.get("ack"),
             "session": SessionOptions.from_dict(obj["session"]) if obj.get("session") is not None else None

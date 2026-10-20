@@ -2760,8 +2760,8 @@ paths:
   /v1/default/banks/{bank_id}/sessions/{session_id}/events:
     get:
       description: "The session's log after position `after`, oldest first: the client's\
-        \ events and the watcher's checks and notes, in one order. Poll with `after`\
-        \ set to the last `seq` you saw to follow the session live."
+        \ messages and Hindsight's checks, notes, handoffs and saves, in one order.\
+        \ Poll with `after` set to the last `seq` you saw to follow the session live."
       operationId: list_session_events
       parameters:
       - explode: false
@@ -2829,11 +2829,11 @@ paths:
       - Sessions
     post:
       description: |-
-        Send what happened in a live conversation since the last append, and get back the memory watcher's notes. The session is created on its first append.
+        Send the messages of a live session since the last append, and get back Hindsight's notes. The session is created on its first append.
 
-        Safe to retry: each event carries the client's own `id`, and an event already stored is skipped. Events are stored in the order sent, after the session's earlier events.
+        Safe to retry: each message carries the client's own `id`, and a message already stored is skipped. Messages are stored in the order sent, after the session's earlier ones.
 
-        With `watch` on, each moment worth a check (a request, a plan, a command that changes things, an edit, a failure) queues one reflect in the background. The append never waits for it: its note comes back with a later append, or from `GET .../events`. `ack` is the `seq` of the last note this client delivered; the response carries the notes after it.
+        With `live` on, each moment worth a check (a request, a plan, a command that changes things, an edit, a failure) queues one reflect in the background. The append never waits for it: its note comes back with a later append, or from `GET .../events`. `ack` is the `seq` of the last note this client delivered; the response carries the notes after it.
       operationId: append_session_events
       parameters:
       - explode: false
@@ -12977,8 +12977,8 @@ components:
             \ otherwise the answer reads only the memories it picked. Word the query\
             \ as the question to decide (\"does my change go against a recorded decision?\"\
             ); `context` is what it is about. For callers that act on any text they\
-            \ get back, such as an agent's memory watcher that should speak only when\
-            \ memory has something to say."
+            \ get back, such as a live session that should speak only when memory\
+            \ has something to say."
           title: Abstain
           type: boolean
         search_queries:
@@ -13324,12 +13324,12 @@ components:
         session:
           metadata:
             key: metadata
-          watch: true
           retain: turns
           context: context
           observation_scopes: per_tag
           document_id: document_id
           strategy: strategy
+          live: true
           tags:
           - tags
           - tags
@@ -13351,7 +13351,6 @@ components:
           is_error: false
           id: id
           content: Content_1
-          ts: 2000-01-23T04:56:07.000+00:00
         - role: user
           tool_call_id: tool_call_id
           tool_calls:
@@ -13368,7 +13367,6 @@ components:
           is_error: false
           id: id
           content: Content_1
-          ts: 2000-01-23T04:56:07.000+00:00
         - role: user
           tool_call_id: tool_call_id
           tool_calls:
@@ -13385,7 +13383,6 @@ components:
           is_error: false
           id: id
           content: Content_1
-          ts: 2000-01-23T04:56:07.000+00:00
         - role: user
           tool_call_id: tool_call_id
           tool_calls:
@@ -13402,7 +13399,6 @@ components:
           is_error: false
           id: id
           content: Content_1
-          ts: 2000-01-23T04:56:07.000+00:00
         - role: user
           tool_call_id: tool_call_id
           tool_calls:
@@ -13419,9 +13415,8 @@ components:
           is_error: false
           id: id
           content: Content_1
-          ts: 2000-01-23T04:56:07.000+00:00
         state:
-          key: ""
+          diff: diff
         turn_end: false
       properties:
         messages:
@@ -13430,8 +13425,7 @@ components:
           maxItems: 500
           type: array
         state:
-          additionalProperties: {}
-          nullable: true
+          $ref: '#/components/schemas/SessionState'
         turn_end:
           default: false
           description: "The assistant finished its turn after these messages: the\
@@ -13469,8 +13463,7 @@ components:
             $ref: '#/components/schemas/SessionNote'
           type: array
         checking:
-          description: "A watcher check is queued or running: another note may still\
-            \ come."
+          description: "A check is queued or running: another note may still come."
           title: Checking
           type: boolean
       required:
@@ -13486,7 +13479,6 @@ components:
         created_at: 2000-01-23T04:56:07.000+00:00
         source: client
         seq: 0
-        ts: 2000-01-23T04:56:07.000+00:00
       properties:
         seq:
           title: Seq
@@ -13496,8 +13488,8 @@ components:
           type: string
         source:
           description: "`client`: an event the client sent. `hindsight`: Hindsight's\
-            \ own entry: a watcher `check`, a `note`, or a `save` of the conversation\
-            \ into its document."
+            \ own entry: a `check`, a `note`, or a `save` of the conversation into\
+            \ its document."
           enum:
           - client
           - hindsight
@@ -13505,10 +13497,6 @@ components:
           type: string
         kind:
           title: Kind
-          type: string
-        ts:
-          format: date-time
-          nullable: true
           type: string
         created_at:
           format: date-time
@@ -13536,7 +13524,6 @@ components:
           created_at: 2000-01-23T04:56:07.000+00:00
           source: client
           seq: 0
-          ts: 2000-01-23T04:56:07.000+00:00
         - event_id: event_id
           payload:
             key: ""
@@ -13544,31 +13531,24 @@ components:
           created_at: 2000-01-23T04:56:07.000+00:00
           source: client
           seq: 0
-          ts: 2000-01-23T04:56:07.000+00:00
-        last_seq: 6
       properties:
         items:
+          description: "Oldest first: poll again with `after` set to the last `seq`."
           items:
             $ref: '#/components/schemas/SessionEvent'
           type: array
-        last_seq:
-          description: "The log's last position now: poll again with `after` set to\
-            \ it."
-          title: Last Seq
-          type: integer
         checking:
           title: Checking
           type: boolean
       required:
       - checking
       - items
-      - last_seq
       title: SessionEventsResponse
     SessionListResponse:
       example:
-        total: 9
-        offset: 2
-        limit: 3
+        total: 7
+        offset: 3
+        limit: 9
         items:
         - check_count: 6
           checking: true
@@ -13579,12 +13559,10 @@ components:
           session_id: session_id
           created_at: 2000-01-23T04:56:07.000+00:00
           document_id: document_id
-          acked_seq: 7
-          saved_seq: 2
+          acked_seq: 2
+          saved_seq: 5
           last_event_at: 2000-01-23T04:56:07.000+00:00
-          delivered_count: 5
-          updated_at: 2000-01-23T04:56:07.000+00:00
-          watch: true
+          live: true
           note_count: 1
           last_seq: 5
         - check_count: 6
@@ -13596,12 +13574,10 @@ components:
           session_id: session_id
           created_at: 2000-01-23T04:56:07.000+00:00
           document_id: document_id
-          acked_seq: 7
-          saved_seq: 2
+          acked_seq: 2
+          saved_seq: 5
           last_event_at: 2000-01-23T04:56:07.000+00:00
-          delivered_count: 5
-          updated_at: 2000-01-23T04:56:07.000+00:00
-          watch: true
+          live: true
           note_count: 1
           last_seq: 5
       properties:
@@ -13646,7 +13622,6 @@ components:
         is_error: false
         id: id
         content: Content_1
-        ts: 2000-01-23T04:56:07.000+00:00
       properties:
         id:
           description: "The client's id for this message, unique in the session. Sending\
@@ -13680,17 +13655,13 @@ components:
           description: "On a `tool` message: the tool failed."
           title: Is Error
           type: boolean
-        ts:
-          format: date-time
-          nullable: true
-          type: string
       required:
       - id
       - role
       title: SessionMessage
     SessionNote:
       description: |-
-        A note for the agent. What the watcher checked and the memories it used are in the session's
+        A note for the agent. What Hindsight checked and the memories it used are in the session's
         event log (the note's `note` entry and its `check`).
       example:
         text: text
@@ -13744,12 +13715,12 @@ components:
       example:
         metadata:
           key: metadata
-        watch: true
         retain: turns
         context: context
         observation_scopes: per_tag
         document_id: document_id
         strategy: strategy
+        live: true
         tags:
         - tags
         - tags
@@ -13758,7 +13729,7 @@ components:
           maxLength: 512
           nullable: true
           type: string
-        watch:
+        live:
           nullable: true
           type: boolean
         retain:
@@ -13788,6 +13759,14 @@ components:
             type: string
           nullable: true
       title: SessionOptions
+    SessionState:
+      example:
+        diff: diff
+      properties:
+        diff:
+          nullable: true
+          type: string
+      title: SessionState
     SessionSummary:
       example:
         check_count: 6
@@ -13799,12 +13778,10 @@ components:
         session_id: session_id
         created_at: 2000-01-23T04:56:07.000+00:00
         document_id: document_id
-        acked_seq: 7
-        saved_seq: 2
+        acked_seq: 2
+        saved_seq: 5
         last_event_at: 2000-01-23T04:56:07.000+00:00
-        delivered_count: 5
-        updated_at: 2000-01-23T04:56:07.000+00:00
-        watch: true
+        live: true
         note_count: 1
         last_seq: 5
       properties:
@@ -13814,8 +13791,8 @@ components:
         document_id:
           title: Document Id
           type: string
-        watch:
-          title: Watch
+        live:
+          title: Live
           type: boolean
         retain:
           title: Retain
@@ -13828,10 +13805,6 @@ components:
           type: integer
         note_count:
           title: Note Count
-          type: integer
-        delivered_count:
-          description: Notes the client acknowledged delivering to the agent.
-          title: Delivered Count
           type: integer
         last_seq:
           title: Last Seq
@@ -13849,10 +13822,6 @@ components:
           format: date-time
           title: Created At
           type: string
-        updated_at:
-          format: date-time
-          title: Updated At
-          type: string
         last_event_at:
           format: date-time
           nullable: true
@@ -13865,16 +13834,14 @@ components:
       - check_count
       - checking
       - created_at
-      - delivered_count
       - document_id
       - event_count
       - last_seq
+      - live
       - note_count
       - retain
       - saved_seq
       - session_id
-      - updated_at
-      - watch
       title: SessionSummary
     SetBankAliasPrimaryRequest:
       description: Request model for showing (or no longer showing) an alias in place

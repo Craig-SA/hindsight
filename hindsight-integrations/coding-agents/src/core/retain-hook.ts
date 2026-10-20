@@ -15,7 +15,7 @@
  */
 import { deriveBankIdOrSkip } from "./bank";
 import { retainLiveSession } from "./chat";
-import { applyBankConfig, loadConfig, watches } from "./config";
+import { applyBankConfig, loadConfig, isLive } from "./config";
 import { DAEMON_WAIT_RETAIN_MS, ensureDaemon } from "./daemon";
 import { diag, readHookEvent } from "./diag";
 import { describeError, log, setLogLevel } from "./log";
@@ -32,7 +32,7 @@ import {
 } from "./session-cache";
 import { SESSION_HARNESSES } from "./session-events";
 import { sessionsUnsupported, type SyncResult } from "./session-sync";
-import { notesKey, sessionStateDir, syncHarnessSession } from "./watch-entry";
+import { notesKey, sessionStateDir, syncHarnessSession } from "./live-entry";
 import { readClaudeTranscript } from "./transcript";
 import { appendJournalTurn, journalPath, readJournalTranscript } from "./turn-journal";
 import { stripInjectedMemory } from "./transcript-util";
@@ -86,7 +86,7 @@ export interface RetainHookSpec {
    * read of the ephemeral transcript the host is about to delete, and closing the turn is a write.
    */
   /**
-   * Whether this Stop hook may hand over a late memory-watcher note by keeping the agent going
+   * Whether this Stop hook may hand over a late live-session note by keeping the agent going
    * (Claude Code's `decision: "block"`); otherwise the note waits for the next prompt.
    */
   stopDeliversNotes?: boolean;
@@ -245,16 +245,16 @@ export async function runRetainHook(
   // (a server with sessions, core/session-sync.ts): the end of the turn goes to the session, and
   // the session saves the turn into this same `conversation:<session>` document — so nothing is
   // written back from here, and only usage is recorded (`retainSessions: false` reaches the session
-  // as `retain: "off"`, see sessionOptions; with no watcher either there is nothing to stream).
+  // as `retain: "off"`, see sessionOptions; with no live session either there is nothing to stream).
   // Once a session is in use the plugin never also writes back itself, even when this sync fails:
   // the document would get the turn twice when the session saves it later. With the memory
   // watcher, a note written after the agent's last tool call is handed over now as a reason to go
   // on, where the harness allows it, instead of waiting a turn.
-  const watching = watches(cfg, spec.harness);
+  const live = isLive(cfg, spec.harness);
   if (
     SESSION_HARNESSES[spec.harness] &&
     sessionId &&
-    (watching || cfg.retainSessions) &&
+    (live || cfg.retainSessions) &&
     !sessionsUnsupported(sessionStateDir(sessionId))
   ) {
     await ensureDaemon(cfg, spec.harness, { waitMs: DAEMON_WAIT_RETAIN_MS });
@@ -279,7 +279,7 @@ export async function runRetainHook(
       diag(spec.harness, "session_sync_failed", { error: describeError(e) });
     }
     if (synced || failed) {
-      const notes = watching
+      const notes = live
         ? [takePendingContext(notesKey(spec.harness), sessionId), ...(synced?.notes ?? [])]
             .filter(Boolean)
             .join("\n\n")

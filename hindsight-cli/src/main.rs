@@ -1133,9 +1133,9 @@ enum SessionCommands {
         #[arg(long)]
         turn_end: bool,
 
-        /// Turn the memory watcher on for this session
+        /// Make it a live session: Hindsight follows it and may send notes back
         #[arg(long)]
-        watch: bool,
+        live: bool,
 
         /// When the conversation is saved: turns, idle, off
         #[arg(long)]
@@ -2104,7 +2104,7 @@ fn run() -> Result<()> {
                 text,
                 tool_call_id,
                 turn_end,
-                watch,
+                live,
                 retain,
                 ack,
             } => commands::session::append(
@@ -2119,7 +2119,7 @@ fn run() -> Result<()> {
                     tool_call_id,
                     turn_end,
                 },
-                commands::session::SessionArgs { watch, retain },
+                commands::session::SessionArgs { live, retain },
                 ack,
                 output_format,
             ),

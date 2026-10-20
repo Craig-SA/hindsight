@@ -1,7 +1,7 @@
 /**
  * Pure logic behind the Sessions view (components/session-detail.tsx): turning a
  * session's raw event log into the rows the 3-way conversation renders, and the
- * small rules around it (delivery, latency, the watcher's decision path, polling).
+ * small rules around it (delivery, latency, the live-session decision path, polling).
  *
  * Kept free of React so every rule here is unit-tested (tests/lib/session-timeline.test.ts).
  */
@@ -15,7 +15,7 @@ export interface LlmCall {
   detail?: string | null;
 }
 
-/** A `check` entry: one watcher reflect (or a recorded skip) for one moment. */
+/** A `check` entry: one live-session reflect (or a recorded skip) for one moment. */
 export interface CheckPayload {
   trigger?: string;
   moment_seq?: number;
@@ -138,7 +138,7 @@ const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
 // A tool is known by the words of its name, not by one agent's names: Claude Code's
 // Edit/Bash/Read, Codex's apply_patch/shell and Hermes's write_file/terminal/read_file all
-// read the same. The server's watcher uses the same rule (engine/sessions/watch.py).
+// read the same. The server's live-session checker uses the same rule (engine/sessions/watch.py).
 const EDIT_WORDS = ["edit", "write", "patch", "replace", "insert", "multiedit", "notebookedit"];
 const COMMAND_WORDS = new Set([
   "bash",
@@ -354,7 +354,7 @@ export function noteLatencyMs(
 }
 
 /**
- * Where the watcher's decision model sent the check (see reflect/agent.py,
+ * Where the live-session decision model sent the check (see reflect/agent.py,
  * `_pick_round`): stay silent without an LLM, let a writer word the answer, or let
  * the reflect LLM judge.
  */

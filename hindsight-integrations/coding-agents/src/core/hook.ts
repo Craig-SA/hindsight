@@ -24,7 +24,7 @@
 import { existsSync } from "node:fs";
 import { deriveBankIdOrSkip } from "./bank";
 import type { Config } from "./config";
-import { applyBankConfig, loadConfig, watches } from "./config";
+import { applyBankConfig, loadConfig, isLive } from "./config";
 import { diag, diagFilePath, readHookEvent } from "./diag";
 import { describeError, log, setLogLevel } from "./log";
 import { startBackgroundSeed } from "./seed";
@@ -51,7 +51,7 @@ import {
   type SessionCache,
 } from "./session-cache";
 import { appendJournalTurn, journalPath } from "./turn-journal";
-import { notesKey, startSync } from "./watch-entry";
+import { notesKey, startSync } from "./live-entry";
 
 export interface HookEventFields {
   prompt?: string;
@@ -476,11 +476,11 @@ export async function runHook(
     log.debug(spec.harness, "hook skipped: bank disabled via banks override", { bank: bankId });
     return;
   }
-  // The memory watcher on a session: the request goes to the session at once, so its heads-up
+  // The live session on a session: the request goes to the session at once, so its heads-up
   // check starts while the agent reads its first files rather than at its first tool call; and a
   // note still waiting (written after the last tool call of the previous turn) goes out with it.
-  let watchNotes: string | undefined;
-  if (watches(cfg, spec.harness) && sessionId) {
+  let liveNotes: string | undefined;
+  if (isLive(cfg, spec.harness) && sessionId) {
     const transcriptPath = (ev as { transcript_path?: unknown }).transcript_path;
     startSync(spec.harness, {
       session_id: sessionId,
@@ -488,7 +488,7 @@ export async function runHook(
       cwd,
       prompt,
     });
-    watchNotes = takePendingContext(notesKey(spec.harness), sessionId);
+    liveNotes = takePendingContext(notesKey(spec.harness), sessionId);
   }
   const client = makeClient({
     apiUrl: cfg.apiUrl,
@@ -520,7 +520,7 @@ export async function runHook(
   ) {
     startBackgroundSeed(cwd, { limit: cfg.seedLimit, harness: spec.harness });
   }
-  let context = [watchNotes, output.context].filter(Boolean).join("\n\n") || undefined;
+  let context = [liveNotes, output.context].filter(Boolean).join("\n\n") || undefined;
   if (context && spec.toolHook && sessionId) {
     stashPendingContext(spec.harness, sessionId, context);
     context = undefined;

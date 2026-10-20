@@ -2,11 +2,11 @@
 sidebar_position: 4
 ---
 
-# Sessions
+# Live sessions
 
-A **session** is one live conversation that your client streams into a bank while it happens: a
+A **live session** is one conversation that your client streams into a bank while it happens: a
 coding agent's run, a support chat, an assistant's day. Hindsight keeps it as a log, saves it into
-memory at the end of each turn, and, with the **memory watcher** on, sends notes back when memory
+memory at the end of each turn, and, with `live` on, follows it and sends notes back when memory
 holds something the agent must hear right now.
 
 It turns retain and reflect into a three-way conversation: the user, your agent, and Hindsight
@@ -38,7 +38,7 @@ Your client does one thing: after something happens, it sends the new messages.
 - **Append.** `POST /v1/default/banks/{bank_id}/sessions/{session_id}/events` with the messages since
   your last append. The first append creates the session. The response comes back in milliseconds
   and carries any notes waiting for you.
-- **Watch.** With `watch` on, each moment worth a look (a new request, a plan, a command that changes
+- **Follow.** With `live` on, each moment worth a look (a new request, a plan, a command that changes
   things, a file edit, a failure) queues one memory check in the background. Your append never waits
   for it. A check runs one [reflect](./reflect) with `abstain`: most moments end silently, and a note is
   written only when memory records a decision the moment does not state or goes against.
@@ -88,16 +88,14 @@ Messages are in the OpenAI chat format most agents already keep, plus your own `
 | The assistant calling tools | `role: assistant`, `tool_calls`: `[{id, type: "function", function: {name, arguments}}]` (`arguments` a JSON string or object) |
 | What a tool returned | `role: tool`, `tool_call_id`, `content`, `is_error` |
 
-Each message may carry `ts`, when it happened by your clock. Up to 500 messages per append. Two more
-fields of the append:
+Up to 500 messages per append. Two more fields of the append:
 
-- `state`: a snapshot of the work, said by no one. For a coding agent `{"diff": "..."}`, the
-  `git diff` of everything it changed so far: the watcher judges an edit against the whole change.
-  Never saved into memory.
+- `state`: a snapshot of the work, said by no one: `{"diff": "..."}`, the `git diff` of everything a
+  coding agent changed so far. An edit is checked against the whole change. Never saved into memory.
 - `turn_end: true`: the assistant finished its turn. Sent again with nothing new in between, it is
   the same turn end.
 
-The watcher recognizes tools by what their names say, whichever agent named them: an edit (`Edit`,
+Hindsight recognizes tools by what their names say, whichever agent named them: an edit (`Edit`,
 `apply_patch`, `write_file`, `patch`), a command (`Bash`, `shell`, `terminal`), or anything else.
 
 ### Session options
@@ -107,7 +105,7 @@ carry options update what they set.
 
 | Option | Meaning | Default |
 |---|---|---|
-| `watch` | The memory watcher follows the session and may send notes | `false` |
+| `live` | Hindsight follows the session and may send notes back; off, the session is only saved | `false` |
 | `retain` | When the conversation is saved: `turns` (each turn end, and when idle), `idle` (only when idle: one extraction for the whole session), or `off` | `turns` |
 | `document_id` | The document it is saved into; fixed once the session exists | `session:<session_id>` |
 | `metadata` | Labels, copied onto the saved document. `harness` names the client (e.g. `claude-code`) and the Control Plane shows its logo | — |
@@ -137,7 +135,7 @@ it. What caused a note and the memories it used are in the session's log (its `c
 `checking` is `true` while a check is queued or running: another note may still come, so a client at
 the end of a turn can poll a little longer.
 
-The watcher's rules: it waits for the session to settle before checking (a plan and the command
+The rules for notes: Hindsight waits for the session to settle before checking (a plan and the command
 right after it are one check), never says the same memory twice, judges the same situation once,
 and sends at most three notes per session.
 
@@ -182,7 +180,7 @@ Each save appends to the document, so its memories are extracted from the new tu
 Each log entry has a `seq`, a `source` (`client` or `hindsight`), a `kind` and a `payload`.
 Hindsight's entries:
 
-- `check`: one watcher check: the `trigger`, the `outcome` (`note`, `silent`, `repeat` when the
+- `check`: one check of a moment: the `trigger`, the `outcome` (`note`, `silent`, `repeat` when the
   memory was already told, `skipped`, `error`), how long it took, and everything sent to reflect
   (`question`, `context`, `search_queries`) with its decision path (`llm_calls`) and tokens.
 - `note`: a note sent back, with `check_seq` pointing at its check.
@@ -226,8 +224,8 @@ Hindsight's entries:
 
 Sessions go through the same extension hooks as other bank reads and writes
 (`append_session_events`, `delete_session`; `list_sessions`, `get_session`,
-`list_session_events`). A caller confined to a tag scope is refused (`403`): the watcher's checks
-search the whole bank, so its notes could carry memories outside the caller's tags.
+`list_session_events`). A caller confined to a tag scope is refused (`403`): the checks search the
+whole bank, so the notes could carry memories outside the caller's tags.
 
 ## Configuration
 
@@ -240,5 +238,5 @@ search the whole bank, so its notes could carry memories outside the caller's ta
 The checks use reflect's [decision model](../configuration#decision-model) when one is set: most
 moments are then settled without an LLM call.
 
-The coding-agents plugin uses sessions for its memory watcher on Claude Code and Codex (see
+The coding-agents plugin streams every Claude Code and Codex session into a live session (see
 [Coding Agents](/sdks/integrations/coding-agents)).

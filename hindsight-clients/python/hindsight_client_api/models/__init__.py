@@ -199,6 +199,7 @@ from hindsight_client_api.models.session_message import SessionMessage
 from hindsight_client_api.models.session_note import SessionNote
 from hindsight_client_api.models.session_note_source import SessionNoteSource
 from hindsight_client_api.models.session_options import SessionOptions
+from hindsight_client_api.models.session_state import SessionState
 from hindsight_client_api.models.session_summary import SessionSummary
 from hindsight_client_api.models.set_bank_alias_primary_request import SetBankAliasPrimaryRequest
 from hindsight_client_api.models.source_facts_include_options import SourceFactsIncludeOptions

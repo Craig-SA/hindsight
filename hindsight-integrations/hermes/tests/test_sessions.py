@@ -50,7 +50,7 @@ def server():
 
 
 def _session_provider(provider, server):
-    return provider({"session_watch": True, "api_url": server.url, "bank_id": "team"})
+    return provider({"live_session": True, "api_url": server.url, "bank_id": "team"})
 
 
 def test_a_turn_streams_as_openai_messages_and_is_not_retained_twice(provider, server):
@@ -74,7 +74,7 @@ def test_a_turn_streams_as_openai_messages_and_is_not_retained_twice(provider, s
 
     start, turn = server.bodies
     assert start["path"] == "/v1/default/banks/team/sessions/session-1/events"
-    assert start["session"]["metadata"]["harness"] == "hermes" and start["session"]["watch"] is True
+    assert start["session"]["metadata"]["harness"] == "hermes" and start["session"]["live"] is True
     assert start["messages"] == [{"id": "t1:0", "role": "user", "content": "Fix the rounding"}]
     # The turn from its user message on; the user message keeps the id the turn start sent.
     assert [m["id"] for m in turn["messages"]] == ["t1:0", "t1:1", "t1:2", "t1:3"]
@@ -91,7 +91,7 @@ def test_notes_are_injected_before_the_next_turn_and_acknowledged_once(provider,
     ]
     block = instance.prefetch("Fix the rounding")
     assert "Half cents round down." in block and 'Source (d): "q"' in block
-    assert "From Hindsight memory (memory watcher)" in block  # the agent is asked to credit it
+    assert "From Hindsight memory (live session)" in block  # the agent is asked to credit it
     # Delivered: the next request acknowledges it, and it is not injected again.
     assert instance.prefetch("next") == ""
     assert server.bodies[-1]["ack"] == 7

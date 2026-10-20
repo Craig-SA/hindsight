@@ -49,11 +49,11 @@ func (r ApiAppendSessionEventsRequest) Execute() (*SessionAppendResponse, *http.
 /*
 AppendSessionEvents Append to a live session
 
-Send what happened in a live conversation since the last append, and get back the memory watcher's notes. The session is created on its first append.
+Send the messages of a live session since the last append, and get back Hindsight's notes. The session is created on its first append.
 
-Safe to retry: each event carries the client's own `id`, and an event already stored is skipped. Events are stored in the order sent, after the session's earlier events.
+Safe to retry: each message carries the client's own `id`, and a message already stored is skipped. Messages are stored in the order sent, after the session's earlier ones.
 
-With `watch` on, each moment worth a check (a request, a plan, a command that changes things, an edit, a failure) queues one reflect in the background. The append never waits for it: its note comes back with a later append, or from `GET .../events`. `ack` is the `seq` of the last note this client delivered; the response carries the notes after it.
+With `live` on, each moment worth a check (a request, a plan, a command that changes things, an edit, a failure) queues one reflect in the background. The append never waits for it: its note comes back with a later append, or from `GET .../events`. `ack` is the `seq` of the last note this client delivered; the response carries the notes after it.
 
  @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  @param bankId
@@ -453,7 +453,7 @@ func (r ApiListSessionEventsRequest) Execute() (*SessionEventsResponse, *http.Re
 /*
 ListSessionEvents Read a session's log
 
-The session's log after position `after`, oldest first: the client's events and the watcher's checks and notes, in one order. Poll with `after` set to the last `seq` you saw to follow the session live.
+The session's log after position `after`, oldest first: the client's messages and Hindsight's checks, notes, handoffs and saves, in one order. Poll with `after` set to the last `seq` you saw to follow the session live.
 
  @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  @param bankId

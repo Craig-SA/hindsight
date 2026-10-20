@@ -208,6 +208,7 @@ hindsight_client_api/models/session_message.py
 hindsight_client_api/models/session_note.py
 hindsight_client_api/models/session_note_source.py
 hindsight_client_api/models/session_options.py
+hindsight_client_api/models/session_state.py
 hindsight_client_api/models/session_summary.py
 hindsight_client_api/models/set_bank_alias_primary_request.py
 hindsight_client_api/models/source_facts_include_options.py

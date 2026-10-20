@@ -20,14 +20,14 @@
  * "Empty" means no git documents AND no survey-baseline marker: under `gitIngest: "none"` no git
  * document is ever written, and the markers are what show the repo was already surveyed (#5124).
  */
-import { WATCH_DECLARATION } from "./watch";
+import { LIVE_DECLARATION } from "./live";
 import { gitHeadSha, gitLogIsCurrent, hasGitHistory, commitsSince } from "./git";
 import { DEEPEN_DIFF_TARGET } from "./status";
 import { startBackgroundSeed } from "./seed";
 import { maybeAutoUpdate } from "./auto-update";
 import { syncCompanionSkill } from "./skill-sync";
 import { SURVEY_DOC_IDS, startCodebaseSurvey, type SurveyHarness } from "./survey";
-import { applyBankConfig, loadConfig, watches } from "./config";
+import { applyBankConfig, loadConfig, isLive } from "./config";
 import { DAEMON_WAIT_SESSION_START_MS, ensureDaemon } from "./daemon";
 import type { Config } from "./config";
 import { deriveBankIdOrSkip } from "./bank";
@@ -354,10 +354,8 @@ export async function buildSessionStartContext(args: {
     reflectOnNewGoals: cfg.autoInject !== "reflect",
     extra: cfg.toolGuideExtra,
   });
-  // The watcher's notes are trusted only when the agent knows they are coming (see WATCH_DECLARATION).
-  const additionalContext = watches(cfg, harness)
-    ? `${preamble}\n\n${WATCH_DECLARATION}`
-    : preamble;
+  // The live session's notes are trusted only when the agent knows they are coming (see LIVE_DECLARATION).
+  const additionalContext = isLive(cfg, harness) ? `${preamble}\n\n${LIVE_DECLARATION}` : preamble;
   // An empty page roster is NOT an empty bank: a bank with memories and no pages still answers a
   // reflect (#5209), so only the confirmed-empty probe above defers it.
   const deferInitialReflect = bankEmpty;

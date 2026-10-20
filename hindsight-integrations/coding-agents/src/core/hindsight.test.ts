@@ -615,7 +615,7 @@ describe("every client-building entrypoint forwards observationScopes", () => {
 
   /** Clients that never retain: the session client only appends, and the session's own scopes
    *  ride in its options (sessionOptions in core/session-sync.ts). */
-  const NO_RETAIN = ["core/watch-entry.ts"];
+  const NO_RETAIN = ["core/live-entry.ts"];
 
   it("has no module that builds a client without passing cfg.observationScopes", () => {
     const dropped = sourceFiles(SRC).filter((rel) => {

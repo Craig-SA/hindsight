@@ -25,7 +25,7 @@ from typing_extensions import Self
 
 class SessionNote(BaseModel):
     """
-    A note for the agent. What the watcher checked and the memories it used are in the session's event log (the note's `note` entry and its `check`).
+    A note for the agent. What Hindsight checked and the memories it used are in the session's event log (the note's `note` entry and its `check`).
     """ # noqa: E501
     seq: StrictInt = Field(description="Its position in the log: acknowledge it by sending it back as `ack`.")
     text: StrictStr

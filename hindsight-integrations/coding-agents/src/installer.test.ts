@@ -146,7 +146,7 @@ describe("claude-code installer", () => {
     }
   });
 
-  it("registers the memory watcher as a short PostToolUse hook on every tool", () => {
+  it("registers the live session as a short PostToolUse hook on every tool", () => {
     // Not Claude Code's `async`: its context never arrives mid-task. The hook hands over a ready note
     // and detaches the review. No matcher: a heads-up rides the first read, before any edit.
     const ctx = makeCtx();
@@ -155,7 +155,7 @@ describe("claude-code installer", () => {
     expect(group.matcher).toBeUndefined();
     expect(group.hooks[0]).toMatchObject({ type: "command", timeout: 10 });
     expect(group.hooks[0].async).toBeUndefined();
-    expect(group.hooks[0].command).toContain(join(ctx.dist, "claude-watch-hook.js"));
+    expect(group.hooks[0].command).toContain(join(ctx.dist, "claude-live-hook.js"));
   });
 
   it("preserves pre-existing foreign hook entries and appends ours", () => {
@@ -1319,7 +1319,7 @@ describe("codebuddy installer MCP file chain", () => {
 describe("codex installer", () => {
   const hooksPath = (ctx: InstallCtx) => join(ctx.home, ".codex", "hooks.json");
   const tomlPath = (ctx: InstallCtx) => join(ctx.home, ".codex", "config.toml");
-  it("install writes the 3 hook events and the watcher's PostToolUse into hooks.json", () => {
+  it("install writes the 3 hook events and the live session's PostToolUse into hooks.json", () => {
     const ctx = makeCtx();
     expect(run(["install", "codex"], ctx)).toBe(0);
     const hooks = readJson(hooksPath(ctx)).hooks;
@@ -1329,7 +1329,7 @@ describe("codex installer", () => {
       "Stop",
       "UserPromptSubmit",
     ]);
-    expect(hooks.PostToolUse[0].hooks[0].command).toContain("codex-watch-hook.js");
+    expect(hooks.PostToolUse[0].hooks[0].command).toContain("codex-live-hook.js");
     expect(hooks.SessionStart[0].hooks[0].command).toContain("codex-sessionstart-hook.js");
     expect(hooks.UserPromptSubmit[0].hooks[0].command).toContain("codex-hook.js");
     expect(hooks.Stop[0].hooks[0].command).toContain("codex-stop-hook.js");

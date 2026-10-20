@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { NOTE_CREDIT, NOTE_LEAD, WATCH_DECLARATION, renderNote, sourceDiff } from "./watch";
+import { NOTE_CREDIT, NOTE_LEAD, LIVE_DECLARATION, renderNote, sourceDiff } from "./live";
 
 const where = (document_id: string, mentioned_at?: string) =>
   renderNote({ seq: 1, text: "K.", source: { document_id, mentioned_at } }).split("Source: ")[1];
@@ -26,7 +26,7 @@ describe("the note's source", () => {
 
   it("asks the agent to credit a note it used, in the same words as all Hindsight memory", () => {
     expect(NOTE_CREDIT).toContain("From Hindsight memory");
-    expect(WATCH_DECLARATION).toContain(NOTE_CREDIT);
+    expect(LIVE_DECLARATION).toContain(NOTE_CREDIT);
   });
 
   it("names where the agent can read each kind of document", () => {
@@ -41,7 +41,7 @@ describe("the note's source", () => {
 
 describe("sourceDiff", () => {
   it("includes new files, not only edits to tracked ones", () => {
-    const repo = mkdtempSync(join(tmpdir(), "watch-diff-"));
+    const repo = mkdtempSync(join(tmpdir(), "live-diff-"));
     execFileSync("git", ["init", "-q", repo]);
     writeFileSync(join(repo, "units.py"), "K = 1024\n");
     expect(sourceDiff(repo)).toContain("+K = 1024");

@@ -125,13 +125,13 @@ export interface RawConfig {
    *  timeout. The automatic session-start reflect is NOT affected — it always uses "low" to fit
    *  its hook window. */
   reflectBudget?: "low" | "mid" | "high";
-  /** What to inject on the session's first prompt (default "watch" on Claude Code and Codex,
+  /** What to inject on the session's first prompt (default "live" on Claude Code and Codex,
    *  "reflect" elsewhere):
    *    "reflect" — one low-budget reflect synthesis (falls back to pages, then recall, on timeout/5xx)
    *    "pages"   — the knowledge pages matching the prompt by search (retrieval only, no LLM)
    *    "recall"  — the bank's memories recalled for the prompt (`recallOptions`; no LLM)
    *    "none"    — nothing; the tool guide routes new goals through pages before optional reflection
-   *    "watch"   — nothing up front: a memory watcher follows the session in the background and
+   *    "live"    — nothing up front: Hindsight follows the session live in the background and
    *                speaks only when memory holds what the agent must hear (Claude Code, Codex; core/session-sync.ts) */
   autoInject?: AutoInject;
   /** @deprecated Use `autoInject`. Still honoured: false = `autoInject: "none"`, true = "reflect";
@@ -577,37 +577,37 @@ function resolveDefaultBankConfig(raw: RawConfig["defaultBankConfig"]): Record<s
 }
 
 /** Apply defaults to a raw (file) config. Pure — the single place the defaults live. */
-export type AutoInject = "reflect" | "pages" | "recall" | "none" | "watch";
-const AUTO_INJECT_MODES: readonly AutoInject[] = ["reflect", "pages", "recall", "none", "watch"];
+export type AutoInject = "reflect" | "pages" | "recall" | "none" | "live";
+const AUTO_INJECT_MODES: readonly AutoInject[] = ["reflect", "pages", "recall", "none", "live"];
 
-/** The harnesses whose PostToolUse hook runs the memory watcher (core/watch-entry.ts): the ones
+/** The harnesses whose PostToolUse hook runs the live session (core/live-entry.ts): the ones
  *  whose transcript the plugin reads into a session. */
-export const WATCH_HARNESSES: readonly string[] = Object.keys(SESSION_HARNESSES);
+export const LIVE_HARNESSES: readonly string[] = Object.keys(SESSION_HARNESSES);
 
-/** Whether this session runs the memory watcher. */
-export const watches = (cfg: Pick<Config, "autoInject">, harness: string): boolean =>
-  cfg.autoInject === "watch" && WATCH_HARNESSES.includes(harness);
+/** Whether this session runs the live session. */
+export const isLive = (cfg: Pick<Config, "autoInject">, harness: string): boolean =>
+  cfg.autoInject === "live" && LIVE_HARNESSES.includes(harness);
 
-/** `autoInject` wins; then the deprecated `autoReflect`; then "watch" where it runs, else "reflect". */
+/** `autoInject` wins; then the deprecated `autoReflect`; then "live" where it runs, else "reflect". */
 function resolveAutoInject(raw: RawConfig): AutoInject {
   if (raw.autoReflect !== undefined) {
     const replacement = raw.autoReflect === false ? "none" : "reflect";
     log.warn("config", `autoReflect is deprecated — use autoInject: "${replacement}" instead`);
   }
-  // The watcher needs a tool hook that hands context to the model. Elsewhere "watch" would inject
-  // nothing and watch nothing, so those harnesses keep the default instead of going memoryless.
-  if (raw.autoInject === "watch" && raw.harness && !WATCH_HARNESSES.includes(raw.harness)) {
+  // The live session needs a tool hook that hands context to the model. Elsewhere "live" would inject
+  // nothing and follow nothing, so those harnesses keep the default instead of going memoryless.
+  if (raw.autoInject === "live" && raw.harness && !LIVE_HARNESSES.includes(raw.harness)) {
     log.warn(
       "config",
-      `autoInject "watch" runs on ${WATCH_HARNESSES.join(" and ")} only; ${raw.harness} uses "reflect"`
+      `autoInject "live" runs on ${LIVE_HARNESSES.join(" and ")} only; ${raw.harness} uses "reflect"`
     );
     return "reflect";
   }
   if (AUTO_INJECT_MODES.includes(raw.autoInject as AutoInject)) return raw.autoInject as AutoInject;
   if (raw.autoReflect !== undefined) return raw.autoReflect === false ? "none" : "reflect";
-  // Where the watcher runs it is the default: it replaced the first-prompt reflect, which always
-  // injected a synthesis; the watcher speaks only when memory records a decision the work touches.
-  return raw.harness && WATCH_HARNESSES.includes(raw.harness) ? "watch" : "reflect";
+  // Where the live session runs it is the default: it replaced the first-prompt reflect, which always
+  // injected a synthesis; the live session speaks only when memory records a decision the work touches.
+  return raw.harness && LIVE_HARNESSES.includes(raw.harness) ? "live" : "reflect";
 }
 
 export function resolveConfig(raw: RawConfig = {}): Config {
@@ -959,8 +959,8 @@ function overrideFields(section: object): Record<string, unknown> {
 /** Resolve just the fields present in `patch`, defaulting against the CURRENT cfg (not the global
  *  defaults) so an override only changes what it names. */
 function resolvePartial(cfg: Config, patch: RawConfig): Partial<Config> {
-  // Resolved for the session's harness, so a harness-bound default or fallback (autoInject "watch"
-  // only where the watcher runs) holds in a per-bank or per-path override too.
+  // Resolved for the session's harness, so a harness-bound default or fallback (autoInject "live"
+  // only where the live session runs) holds in a per-bank or per-path override too.
   const full = resolveConfig({ ...patch, harness: patch.harness ?? cfg.harness });
   const out: Partial<Config> = {};
   for (const key of Object.keys(patch) as (keyof RawConfig)[]) {

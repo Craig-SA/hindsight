@@ -6247,7 +6247,7 @@ export type ReflectRequest = {
   /**
    * Abstain
    *
-   * Allow an empty answer. When memory holds nothing that answers the query, the response has an empty `text` and `abstained: true`, instead of reflect searching on or failing. With a decision model, it is asked the query itself about the `context` and the best memories found: when it sees nothing the answer depends on, reflect returns with no LLM call; otherwise the answer reads only the memories it picked. Word the query as the question to decide ("does my change go against a recorded decision?"); `context` is what it is about. For callers that act on any text they get back, such as an agent's memory watcher that should speak only when memory has something to say.
+   * Allow an empty answer. When memory holds nothing that answers the query, the response has an empty `text` and `abstained: true`, instead of reflect searching on or failing. With a decision model, it is asked the query itself about the `context` and the best memories found: when it sees nothing the answer depends on, reflect returns with no LLM call; otherwise the answer reads only the memories it picked. Word the query as the question to decide ("does my change go against a recorded decision?"); `context` is what it is about. For callers that act on any text they get back, such as a live session that should speak only when memory has something to say.
    */
   abstain?: boolean;
   /**
@@ -6589,13 +6589,9 @@ export type SessionAppendRequest = {
    */
   messages?: Array<SessionMessage>;
   /**
-   * State
-   *
-   * A snapshot of the work after these messages, said by no one: for a coding agent `{"diff": "..."}`, the `git diff` of everything it changed so far. The watcher judges an edit against it. Never saved into memory.
+   * A snapshot of the work after these messages, said by no one. Never saved into memory.
    */
-  state?: {
-    [key: string]: unknown;
-  } | null;
+  state?: SessionState | null;
   /**
    * Turn End
    *
@@ -6624,7 +6620,7 @@ export type SessionAppendResponse = {
   /**
    * Checking
    *
-   * A watcher check is queued or running: another note may still come.
+   * A check is queued or running: another note may still come.
    */
   checking: boolean;
 };
@@ -6644,17 +6640,13 @@ export type SessionEvent = {
   /**
    * Source
    *
-   * `client`: an event the client sent. `hindsight`: Hindsight's own entry: a watcher `check`, a `note`, or a `save` of the conversation into its document.
+   * `client`: an event the client sent. `hindsight`: Hindsight's own entry: a `check`, a `note`, or a `save` of the conversation into its document.
    */
   source: "client" | "hindsight";
   /**
    * Kind
    */
   kind: string;
-  /**
-   * Ts
-   */
-  ts?: string | null;
   /**
    * Created At
    */
@@ -6673,14 +6665,10 @@ export type SessionEvent = {
 export type SessionEventsResponse = {
   /**
    * Items
+   *
+   * Oldest first: poll again with `after` set to the last `seq`.
    */
   items: Array<SessionEvent>;
-  /**
-   * Last Seq
-   *
-   * The log's last position now: poll again with `after` set to it.
-   */
-  last_seq: number;
   /**
    * Checking
    */
@@ -6751,18 +6739,12 @@ export type SessionMessage = {
    * On a `tool` message: the tool failed.
    */
   is_error?: boolean;
-  /**
-   * Ts
-   *
-   * When it happened, by the client's clock.
-   */
-  ts?: string | null;
 };
 
 /**
  * SessionNote
  *
- * A note for the agent. What the watcher checked and the memories it used are in the session's
+ * A note for the agent. What Hindsight checked and the memories it used are in the session's
  * event log (the note's `note` entry and its `check`).
  */
 export type SessionNote = {
@@ -6815,11 +6797,11 @@ export type SessionOptions = {
    */
   document_id?: string | null;
   /**
-   * Watch
+   * Live
    *
-   * Whether the memory watcher follows the session and may send notes back. Off by default.
+   * Hindsight follows the session live and may send notes back when memory records a decision the work goes against. Off by default: the session is only saved.
    */
-  watch?: boolean | null;
+  live?: boolean | null;
   /**
    * Retain
    *
@@ -6867,6 +6849,18 @@ export type SessionOptions = {
 };
 
 /**
+ * SessionState
+ */
+export type SessionState = {
+  /**
+   * Diff
+   *
+   * For a coding agent: the `git diff` of everything it changed so far. An edit is checked against it.
+   */
+  diff?: string | null;
+};
+
+/**
  * SessionSummary
  */
 export type SessionSummary = {
@@ -6879,9 +6873,9 @@ export type SessionSummary = {
    */
   document_id: string;
   /**
-   * Watch
+   * Live
    */
-  watch: boolean;
+  live: boolean;
   /**
    * Retain
    */
@@ -6898,12 +6892,6 @@ export type SessionSummary = {
    * Note Count
    */
   note_count: number;
-  /**
-   * Delivered Count
-   *
-   * Notes the client acknowledged delivering to the agent.
-   */
-  delivered_count: number;
   /**
    * Last Seq
    */
@@ -6924,10 +6912,6 @@ export type SessionSummary = {
    * Created At
    */
   created_at: string;
-  /**
-   * Updated At
-   */
-  updated_at: string;
   /**
    * Last Event At
    *

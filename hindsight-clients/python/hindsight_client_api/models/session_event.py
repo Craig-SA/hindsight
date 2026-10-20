@@ -19,7 +19,7 @@ import json
 
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -29,12 +29,11 @@ class SessionEvent(BaseModel):
     """ # noqa: E501
     seq: StrictInt
     event_id: StrictStr
-    source: StrictStr = Field(description="`client`: an event the client sent. `hindsight`: Hindsight's own entry: a watcher `check`, a `note`, or a `save` of the conversation into its document.")
+    source: StrictStr = Field(description="`client`: an event the client sent. `hindsight`: Hindsight's own entry: a `check`, a `note`, or a `save` of the conversation into its document.")
     kind: StrictStr
-    ts: Optional[datetime] = None
     created_at: datetime
     payload: Dict[str, Any]
-    __properties: ClassVar[List[str]] = ["seq", "event_id", "source", "kind", "ts", "created_at", "payload"]
+    __properties: ClassVar[List[str]] = ["seq", "event_id", "source", "kind", "created_at", "payload"]
 
     @field_validator('source')
     def source_validate_enum(cls, value):
@@ -82,11 +81,6 @@ class SessionEvent(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # set to None if ts (nullable) is None
-        # and model_fields_set contains the field
-        if self.ts is None and "ts" in self.model_fields_set:
-            _dict['ts'] = None
-
         return _dict
 
     @classmethod
@@ -103,7 +97,6 @@ class SessionEvent(BaseModel):
             "event_id": obj.get("event_id"),
             "source": obj.get("source"),
             "kind": obj.get("kind"),
-            "ts": obj.get("ts"),
             "created_at": obj.get("created_at"),
             "payload": obj.get("payload")
         })

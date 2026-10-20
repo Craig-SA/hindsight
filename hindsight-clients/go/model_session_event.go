@@ -24,10 +24,9 @@ var _ MappedNullable = &SessionEvent{}
 type SessionEvent struct {
 	Seq int32 `json:"seq"`
 	EventId string `json:"event_id"`
-	// `client`: an event the client sent. `hindsight`: Hindsight's own entry: a watcher `check`, a `note`, or a `save` of the conversation into its document.
+	// `client`: an event the client sent. `hindsight`: Hindsight's own entry: a `check`, a `note`, or a `save` of the conversation into its document.
 	Source string `json:"source"`
 	Kind string `json:"kind"`
-	Ts NullableTime `json:"ts,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	Payload map[string]interface{} `json:"payload"`
 }
@@ -153,48 +152,6 @@ func (o *SessionEvent) SetKind(v string) {
 	o.Kind = v
 }
 
-// GetTs returns the Ts field value if set, zero value otherwise (both if not set or set to explicit null).
-func (o *SessionEvent) GetTs() time.Time {
-	if o == nil || IsNil(o.Ts.Get()) {
-		var ret time.Time
-		return ret
-	}
-	return *o.Ts.Get()
-}
-
-// GetTsOk returns a tuple with the Ts field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-// NOTE: If the value is an explicit nil, `nil, true` will be returned
-func (o *SessionEvent) GetTsOk() (*time.Time, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return o.Ts.Get(), o.Ts.IsSet()
-}
-
-// HasTs returns a boolean if a field has been set.
-func (o *SessionEvent) HasTs() bool {
-	if o != nil && o.Ts.IsSet() {
-		return true
-	}
-
-	return false
-}
-
-// SetTs gets a reference to the given NullableTime and assigns it to the Ts field.
-func (o *SessionEvent) SetTs(v time.Time) {
-	o.Ts.Set(&v)
-}
-// SetTsNil sets the value for Ts to be an explicit nil
-func (o *SessionEvent) SetTsNil() {
-	o.Ts.Set(nil)
-}
-
-// UnsetTs ensures that no value is present for Ts, not even an explicit nil
-func (o *SessionEvent) UnsetTs() {
-	o.Ts.Unset()
-}
-
 // GetCreatedAt returns the CreatedAt field value
 func (o *SessionEvent) GetCreatedAt() time.Time {
 	if o == nil {
@@ -257,9 +214,6 @@ func (o SessionEvent) ToMap() (map[string]interface{}, error) {
 	toSerialize["event_id"] = o.EventId
 	toSerialize["source"] = o.Source
 	toSerialize["kind"] = o.Kind
-	if o.Ts.IsSet() {
-		toSerialize["ts"] = o.Ts.Get()
-	}
 	toSerialize["created_at"] = o.CreatedAt
 	toSerialize["payload"] = o.Payload
 	return toSerialize, nil

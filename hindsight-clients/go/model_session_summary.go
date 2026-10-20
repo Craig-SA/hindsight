@@ -24,19 +24,16 @@ var _ MappedNullable = &SessionSummary{}
 type SessionSummary struct {
 	SessionId string `json:"session_id"`
 	DocumentId string `json:"document_id"`
-	Watch bool `json:"watch"`
+	Live bool `json:"live"`
 	Retain string `json:"retain"`
 	EventCount int32 `json:"event_count"`
 	CheckCount int32 `json:"check_count"`
 	NoteCount int32 `json:"note_count"`
-	// Notes the client acknowledged delivering to the agent.
-	DeliveredCount int32 `json:"delivered_count"`
 	LastSeq int32 `json:"last_seq"`
 	SavedSeq int32 `json:"saved_seq"`
 	AckedSeq int32 `json:"acked_seq"`
 	Checking bool `json:"checking"`
 	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
 	LastEventAt NullableTime `json:"last_event_at,omitempty"`
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
@@ -47,22 +44,20 @@ type _SessionSummary SessionSummary
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewSessionSummary(sessionId string, documentId string, watch bool, retain string, eventCount int32, checkCount int32, noteCount int32, deliveredCount int32, lastSeq int32, savedSeq int32, ackedSeq int32, checking bool, createdAt time.Time, updatedAt time.Time) *SessionSummary {
+func NewSessionSummary(sessionId string, documentId string, live bool, retain string, eventCount int32, checkCount int32, noteCount int32, lastSeq int32, savedSeq int32, ackedSeq int32, checking bool, createdAt time.Time) *SessionSummary {
 	this := SessionSummary{}
 	this.SessionId = sessionId
 	this.DocumentId = documentId
-	this.Watch = watch
+	this.Live = live
 	this.Retain = retain
 	this.EventCount = eventCount
 	this.CheckCount = checkCount
 	this.NoteCount = noteCount
-	this.DeliveredCount = deliveredCount
 	this.LastSeq = lastSeq
 	this.SavedSeq = savedSeq
 	this.AckedSeq = ackedSeq
 	this.Checking = checking
 	this.CreatedAt = createdAt
-	this.UpdatedAt = updatedAt
 	return &this
 }
 
@@ -122,28 +117,28 @@ func (o *SessionSummary) SetDocumentId(v string) {
 	o.DocumentId = v
 }
 
-// GetWatch returns the Watch field value
-func (o *SessionSummary) GetWatch() bool {
+// GetLive returns the Live field value
+func (o *SessionSummary) GetLive() bool {
 	if o == nil {
 		var ret bool
 		return ret
 	}
 
-	return o.Watch
+	return o.Live
 }
 
-// GetWatchOk returns a tuple with the Watch field value
+// GetLiveOk returns a tuple with the Live field value
 // and a boolean to check if the value has been set.
-func (o *SessionSummary) GetWatchOk() (*bool, bool) {
+func (o *SessionSummary) GetLiveOk() (*bool, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.Watch, true
+	return &o.Live, true
 }
 
-// SetWatch sets field value
-func (o *SessionSummary) SetWatch(v bool) {
-	o.Watch = v
+// SetLive sets field value
+func (o *SessionSummary) SetLive(v bool) {
+	o.Live = v
 }
 
 // GetRetain returns the Retain field value
@@ -240,30 +235,6 @@ func (o *SessionSummary) GetNoteCountOk() (*int32, bool) {
 // SetNoteCount sets field value
 func (o *SessionSummary) SetNoteCount(v int32) {
 	o.NoteCount = v
-}
-
-// GetDeliveredCount returns the DeliveredCount field value
-func (o *SessionSummary) GetDeliveredCount() int32 {
-	if o == nil {
-		var ret int32
-		return ret
-	}
-
-	return o.DeliveredCount
-}
-
-// GetDeliveredCountOk returns a tuple with the DeliveredCount field value
-// and a boolean to check if the value has been set.
-func (o *SessionSummary) GetDeliveredCountOk() (*int32, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.DeliveredCount, true
-}
-
-// SetDeliveredCount sets field value
-func (o *SessionSummary) SetDeliveredCount(v int32) {
-	o.DeliveredCount = v
 }
 
 // GetLastSeq returns the LastSeq field value
@@ -386,30 +357,6 @@ func (o *SessionSummary) SetCreatedAt(v time.Time) {
 	o.CreatedAt = v
 }
 
-// GetUpdatedAt returns the UpdatedAt field value
-func (o *SessionSummary) GetUpdatedAt() time.Time {
-	if o == nil {
-		var ret time.Time
-		return ret
-	}
-
-	return o.UpdatedAt
-}
-
-// GetUpdatedAtOk returns a tuple with the UpdatedAt field value
-// and a boolean to check if the value has been set.
-func (o *SessionSummary) GetUpdatedAtOk() (*time.Time, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.UpdatedAt, true
-}
-
-// SetUpdatedAt sets field value
-func (o *SessionSummary) SetUpdatedAt(v time.Time) {
-	o.UpdatedAt = v
-}
-
 // GetLastEventAt returns the LastEventAt field value if set, zero value otherwise (both if not set or set to explicit null).
 func (o *SessionSummary) GetLastEventAt() time.Time {
 	if o == nil || IsNil(o.LastEventAt.Get()) {
@@ -496,18 +443,16 @@ func (o SessionSummary) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["session_id"] = o.SessionId
 	toSerialize["document_id"] = o.DocumentId
-	toSerialize["watch"] = o.Watch
+	toSerialize["live"] = o.Live
 	toSerialize["retain"] = o.Retain
 	toSerialize["event_count"] = o.EventCount
 	toSerialize["check_count"] = o.CheckCount
 	toSerialize["note_count"] = o.NoteCount
-	toSerialize["delivered_count"] = o.DeliveredCount
 	toSerialize["last_seq"] = o.LastSeq
 	toSerialize["saved_seq"] = o.SavedSeq
 	toSerialize["acked_seq"] = o.AckedSeq
 	toSerialize["checking"] = o.Checking
 	toSerialize["created_at"] = o.CreatedAt
-	toSerialize["updated_at"] = o.UpdatedAt
 	if o.LastEventAt.IsSet() {
 		toSerialize["last_event_at"] = o.LastEventAt.Get()
 	}
@@ -524,18 +469,16 @@ func (o *SessionSummary) UnmarshalJSON(data []byte) (err error) {
 	requiredProperties := []string{
 		"session_id",
 		"document_id",
-		"watch",
+		"live",
 		"retain",
 		"event_count",
 		"check_count",
 		"note_count",
-		"delivered_count",
 		"last_seq",
 		"saved_seq",
 		"acked_seq",
 		"checking",
 		"created_at",
-		"updated_at",
 	}
 
 	allProperties := make(map[string]interface{})

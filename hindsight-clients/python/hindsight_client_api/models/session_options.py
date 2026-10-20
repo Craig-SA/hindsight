@@ -29,14 +29,14 @@ class SessionOptions(BaseModel):
     How the session is set up. Applied when an append creates the session; later appends that carry options update the fields they set.
     """ # noqa: E501
     document_id: Optional[Annotated[str, Field(strict=True, max_length=512)]] = None
-    watch: Optional[StrictBool] = None
+    live: Optional[StrictBool] = None
     retain: Optional[StrictStr] = None
     tags: Optional[List[StrictStr]] = None
     context: Optional[Annotated[str, Field(strict=True, max_length=2000)]] = None
     strategy: Optional[Annotated[str, Field(strict=True, max_length=256)]] = None
     observation_scopes: Optional[ObservationScopes1] = None
     metadata: Optional[Dict[str, StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["document_id", "watch", "retain", "tags", "context", "strategy", "observation_scopes", "metadata"]
+    __properties: ClassVar[List[str]] = ["document_id", "live", "retain", "tags", "context", "strategy", "observation_scopes", "metadata"]
 
     @field_validator('retain')
     def retain_validate_enum(cls, value):
@@ -95,10 +95,10 @@ class SessionOptions(BaseModel):
         if self.document_id is None and "document_id" in self.model_fields_set:
             _dict['document_id'] = None
 
-        # set to None if watch (nullable) is None
+        # set to None if live (nullable) is None
         # and model_fields_set contains the field
-        if self.watch is None and "watch" in self.model_fields_set:
-            _dict['watch'] = None
+        if self.live is None and "live" in self.model_fields_set:
+            _dict['live'] = None
 
         # set to None if retain (nullable) is None
         # and model_fields_set contains the field
@@ -143,7 +143,7 @@ class SessionOptions(BaseModel):
 
         _obj = cls.model_validate({
             "document_id": obj.get("document_id"),
-            "watch": obj.get("watch"),
+            "live": obj.get("live"),
             "retain": obj.get("retain"),
             "tags": obj.get("tags"),
             "context": obj.get("context"),

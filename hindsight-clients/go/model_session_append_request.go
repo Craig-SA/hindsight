@@ -20,7 +20,7 @@ var _ MappedNullable = &SessionAppendRequest{}
 // SessionAppendRequest struct for SessionAppendRequest
 type SessionAppendRequest struct {
 	Messages []SessionMessage `json:"messages,omitempty"`
-	State map[string]interface{} `json:"state,omitempty"`
+	State NullableSessionState `json:"state,omitempty"`
 	// The assistant finished its turn after these messages: the turn is saved into memory (with `retain: turns`). Sent again with nothing new in between, it is the same turn end.
 	TurnEnd *bool `json:"turn_end,omitempty"`
 	Ack NullableInt32 `json:"ack,omitempty"`
@@ -81,36 +81,45 @@ func (o *SessionAppendRequest) SetMessages(v []SessionMessage) {
 }
 
 // GetState returns the State field value if set, zero value otherwise (both if not set or set to explicit null).
-func (o *SessionAppendRequest) GetState() map[string]interface{} {
-	if o == nil {
-		var ret map[string]interface{}
+func (o *SessionAppendRequest) GetState() SessionState {
+	if o == nil || IsNil(o.State.Get()) {
+		var ret SessionState
 		return ret
 	}
-	return o.State
+	return *o.State.Get()
 }
 
 // GetStateOk returns a tuple with the State field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 // NOTE: If the value is an explicit nil, `nil, true` will be returned
-func (o *SessionAppendRequest) GetStateOk() (map[string]interface{}, bool) {
-	if o == nil || IsNil(o.State) {
-		return map[string]interface{}{}, false
+func (o *SessionAppendRequest) GetStateOk() (*SessionState, bool) {
+	if o == nil {
+		return nil, false
 	}
-	return o.State, true
+	return o.State.Get(), o.State.IsSet()
 }
 
 // HasState returns a boolean if a field has been set.
 func (o *SessionAppendRequest) HasState() bool {
-	if o != nil && !IsNil(o.State) {
+	if o != nil && o.State.IsSet() {
 		return true
 	}
 
 	return false
 }
 
-// SetState gets a reference to the given map[string]interface{} and assigns it to the State field.
-func (o *SessionAppendRequest) SetState(v map[string]interface{}) {
-	o.State = v
+// SetState gets a reference to the given NullableSessionState and assigns it to the State field.
+func (o *SessionAppendRequest) SetState(v SessionState) {
+	o.State.Set(&v)
+}
+// SetStateNil sets the value for State to be an explicit nil
+func (o *SessionAppendRequest) SetStateNil() {
+	o.State.Set(nil)
+}
+
+// UnsetState ensures that no value is present for State, not even an explicit nil
+func (o *SessionAppendRequest) UnsetState() {
+	o.State.Unset()
 }
 
 // GetTurnEnd returns the TurnEnd field value if set, zero value otherwise.
@@ -242,8 +251,8 @@ func (o SessionAppendRequest) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Messages) {
 		toSerialize["messages"] = o.Messages
 	}
-	if o.State != nil {
-		toSerialize["state"] = o.State
+	if o.State.IsSet() {
+		toSerialize["state"] = o.State.Get()
 	}
 	if !IsNil(o.TurnEnd) {
 		toSerialize["turn_end"] = o.TurnEnd

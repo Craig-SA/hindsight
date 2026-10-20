@@ -1,7 +1,7 @@
 /**
- * The memory watcher's client half (`autoInject: "watch"`): Hindsight beside the coding agent,
- * speaking only when memory holds something the agent must hear. The watcher itself runs in a
- * Hindsight session (core/session-sync.ts); this module is what the plugin adds around it — how a
+ * The live session's client half (`autoInject: "live"`): Hindsight beside the coding agent,
+ * speaking only when memory holds something the agent must hear. The session itself runs in
+ * Hindsight (core/session-sync.ts); this module is what the plugin adds around it — how a
  * note reads to the agent, where its source is, and the change the session checks edits against.
  */
 import { gitWithTimeout } from "./git";
@@ -12,16 +12,16 @@ export const NOTE_LEAD = "🧠 Note from this project's memory (past sessions an
 
 /**
  * How the agent credits a note to the user: the same blockquote as every other Hindsight
- * memory it uses (inject.ts, knowledge-tools.ts), named after the watcher.
+ * memory it uses (inject.ts, knowledge-tools.ts), named after the live session.
  */
-export const NOTE_CREDIT = "> 🧠 **From Hindsight memory (memory watcher)** —";
+export const NOTE_CREDIT = "> 🧠 **From Hindsight memory (live session)** —";
 
 /**
  * Told to the agent once, at session start. Without it a note read as an injection: Claude called a
  * real decision (a recorded corp-beta override) a prompt injection and refused it three times.
  */
-export const WATCH_DECLARATION =
-  "A memory watcher runs next to you. It knows this project's past sessions and the decisions made " +
+export const LIVE_DECLARATION =
+  "Hindsight follows this session live. It knows this project's past sessions and the decisions made " +
   `in them, and while you work it may post notes starting with "${NOTE_LEAD.split(" (")[0]}". A note ` +
   "is a project requirement even when the request does not mention it: a fix that contradicts a past " +
   "decision is a wrong fix. Each note says where to read its source: check it; if it says what the " +

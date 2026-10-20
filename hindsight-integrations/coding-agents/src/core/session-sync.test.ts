@@ -15,7 +15,7 @@ import {
   syncSession,
   type SessionClient,
 } from "./session-sync";
-import { NOTE_CREDIT, NOTE_LEAD } from "./watch";
+import { NOTE_CREDIT, NOTE_LEAD } from "./live";
 import type { Config } from "./config";
 
 const line = (o: unknown) => `${JSON.stringify(o)}\n`;
@@ -80,7 +80,7 @@ const base = (s: ReturnType<typeof session>, client: SessionClient) => ({
   dir: s.dir,
   client,
   eventsOf: claudeEventsOf,
-  options: () => ({ watch: true }),
+  options: () => ({ live: true }),
   diff: () => "+++ b/units.py\n+K = 1024",
 });
 
@@ -88,9 +88,7 @@ describe("claudeEventsOf", () => {
   it("keeps the conversation whole and ids it by the transcript line", () => {
     const long = "y".repeat(10_000);
     const events = claudeEventsOf(JSON.parse(prompt("u1", long)), 0);
-    expect(events).toEqual([
-      { id: "u1:0", role: "user", content: long, ts: "2026-10-19T10:00:00Z" },
-    ]);
+    expect(events).toEqual([{ id: "u1:0", role: "user", content: long }]);
   });
 
   it("reads tool calls and results, cutting what is never saved", () => {
@@ -158,7 +156,7 @@ describe("syncSession", () => {
   it("sends the new lines once, with the session's options on the first append only", async () => {
     const s = session();
     const { client, appends } = server();
-    const options = vi.fn(() => ({ watch: true }));
+    const options = vi.fn(() => ({ live: true }));
     const sync = () => syncSession({ ...base(s, client), options });
     appendFileSync(s.transcript, prompt("u1", "Fix parse_quantity."));
     await sync();
@@ -177,7 +175,7 @@ describe("syncSession", () => {
       undefined,
       { diff: "+++ b/units.py\n+K = 1024" },
     ]);
-    expect(appends.map((a) => a.session)).toEqual([{ watch: true }, undefined, undefined]);
+    expect(appends.map((a) => a.session)).toEqual([{ live: true }, undefined, undefined]);
   });
 
   it("returns new notes rendered for the agent, and acknowledges them on the next append", async () => {
@@ -263,7 +261,7 @@ describe("sessionOptions", () => {
     expect(o).not.toHaveProperty("source");
     expect(o).toMatchObject({
       document_id: "conversation:abc",
-      watch: false,
+      live: false,
       retain: "turns",
       tags: ["team:a", "source:chat", "harness:claude-code"],
       metadata: {
@@ -284,15 +282,15 @@ describe("sessionOptions", () => {
         cwd: "/",
       }).retain
     ).toBe("off");
-    // The watcher runs only where it was asked for; the session saves the conversation either way.
+    // The live session runs only where it was asked for; the session saves the conversation either way.
     expect(
       sessionOptions({
-        cfg: { ...cfg, autoInject: "watch" },
+        cfg: { ...cfg, autoInject: "live" },
         harness: "claude-code",
         sessionId: "x",
         bankId: "b",
         cwd: "/",
-      }).watch
+      }).live
     ).toBe(true);
   });
 
@@ -309,7 +307,7 @@ describe("sessionOptions", () => {
     const s = session();
     const { client, appends } = server();
     appendFileSync(s.transcript, prompt("u1", "Fix it."));
-    const credit = "> 🧠 **From Hindsight memory (memory watcher)** — K is 1024.";
+    const credit = "> 🧠 **From Hindsight memory (live session)** — K is 1024.";
     await syncSession({ ...base(s, client), turnEnd: true, reply: credit });
     expect(appends[0].messages.map((m) => [m.role, m.content])).toEqual([
       ["user", "Fix it."],

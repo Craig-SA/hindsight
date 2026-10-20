@@ -17,7 +17,6 @@ import pprint
 import re  # noqa: F401
 import json
 
-from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr, field_validator
 from typing import Any, ClassVar, Dict, List, Optional
 from typing_extensions import Annotated
@@ -36,8 +35,7 @@ class SessionMessage(BaseModel):
     tool_calls: Optional[List[ToolCall]] = None
     tool_call_id: Optional[Annotated[str, Field(strict=True, max_length=256)]] = None
     is_error: Optional[StrictBool] = Field(default=False, description="On a `tool` message: the tool failed.")
-    ts: Optional[datetime] = None
-    __properties: ClassVar[List[str]] = ["id", "role", "content", "tool_calls", "tool_call_id", "is_error", "ts"]
+    __properties: ClassVar[List[str]] = ["id", "role", "content", "tool_calls", "tool_call_id", "is_error"]
 
     @field_validator('role')
     def role_validate_enum(cls, value):
@@ -110,11 +108,6 @@ class SessionMessage(BaseModel):
         if self.tool_call_id is None and "tool_call_id" in self.model_fields_set:
             _dict['tool_call_id'] = None
 
-        # set to None if ts (nullable) is None
-        # and model_fields_set contains the field
-        if self.ts is None and "ts" in self.model_fields_set:
-            _dict['ts'] = None
-
         return _dict
 
     @classmethod
@@ -132,8 +125,7 @@ class SessionMessage(BaseModel):
             "content": Content1.from_dict(obj["content"]) if obj.get("content") is not None else None,
             "tool_calls": [ToolCall.from_dict(_item) for _item in obj["tool_calls"]] if obj.get("tool_calls") is not None else None,
             "tool_call_id": obj.get("tool_call_id"),
-            "is_error": obj.get("is_error") if obj.get("is_error") is not None else False,
-            "ts": obj.get("ts")
+            "is_error": obj.get("is_error") if obj.get("is_error") is not None else False
         })
         return _obj
 

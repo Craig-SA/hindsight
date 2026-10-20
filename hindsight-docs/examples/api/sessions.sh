@@ -1,5 +1,5 @@
 #!/bin/bash
-# Sessions API examples for Hindsight CLI (live conversations and the memory watcher)
+# Sessions API examples for Hindsight CLI (live sessions)
 # Run: bash examples/api/sessions.sh
 
 set -e
@@ -25,7 +25,7 @@ EOF
 # [docs:sessions-append]
 # One message from the flags; --id makes a retry store nothing twice. The first append creates the session.
 hindsight session append my-bank "$SESSION_ID" --id 1 --role user --text "Half cents round the wrong way." \
-  --watch --retain turns
+  --live --retain turns
 
 # Several messages at once (tool calls too), from a JSON array of OpenAI-style messages.
 hindsight session append my-bank "$SESSION_ID" --messages-file "$MESSAGES_FILE"

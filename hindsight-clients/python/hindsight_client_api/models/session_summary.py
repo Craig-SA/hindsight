@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -29,21 +29,19 @@ class SessionSummary(BaseModel):
     """ # noqa: E501
     session_id: StrictStr
     document_id: StrictStr
-    watch: StrictBool
+    live: StrictBool
     retain: StrictStr
     event_count: StrictInt
     check_count: StrictInt
     note_count: StrictInt
-    delivered_count: StrictInt = Field(description="Notes the client acknowledged delivering to the agent.")
     last_seq: StrictInt
     saved_seq: StrictInt
     acked_seq: StrictInt
     checking: StrictBool
     created_at: datetime
-    updated_at: datetime
     last_event_at: Optional[datetime] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["session_id", "document_id", "watch", "retain", "event_count", "check_count", "note_count", "delivered_count", "last_seq", "saved_seq", "acked_seq", "checking", "created_at", "updated_at", "last_event_at", "metadata"]
+    __properties: ClassVar[List[str]] = ["session_id", "document_id", "live", "retain", "event_count", "check_count", "note_count", "last_seq", "saved_seq", "acked_seq", "checking", "created_at", "last_event_at", "metadata"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -103,18 +101,16 @@ class SessionSummary(BaseModel):
         _obj = cls.model_validate({
             "session_id": obj.get("session_id"),
             "document_id": obj.get("document_id"),
-            "watch": obj.get("watch"),
+            "live": obj.get("live"),
             "retain": obj.get("retain"),
             "event_count": obj.get("event_count"),
             "check_count": obj.get("check_count"),
             "note_count": obj.get("note_count"),
-            "delivered_count": obj.get("delivered_count"),
             "last_seq": obj.get("last_seq"),
             "saved_seq": obj.get("saved_seq"),
             "acked_seq": obj.get("acked_seq"),
             "checking": obj.get("checking"),
             "created_at": obj.get("created_at"),
-            "updated_at": obj.get("updated_at"),
             "last_event_at": obj.get("last_event_at"),
             "metadata": obj.get("metadata")
         })
