@@ -5098,6 +5098,8 @@ class MemoryEngine(MemoryEngineInterface):
                     await self.sessions.run_check(task_dict)
                 elif task_type == "session_save":
                     await self.sessions.run_save(task_dict)
+                elif task_type == "session_idle":
+                    await self.sessions.run_idle(task_dict)
                 else:
                     logger.error(f"Unknown task type: {task_type}")
                     # Don't retry unknown task types
@@ -11421,6 +11423,8 @@ class MemoryEngine(MemoryEngineInterface):
                 )
                 deleted = _deleted_doc.deleted
                 file_storage_key = _deleted_doc.file_storage_key
+                if deleted:
+                    await self.sessions.forget_saves(conn, bank_id, document_id)
 
                 # Invalidate observations referencing these (now-deleted) memories
                 if unit_ids:
@@ -12187,6 +12191,10 @@ class MemoryEngine(MemoryEngineInterface):
                         # The bank's rows go, and with them the only record of its pre-tenant-prefix
                         # file keys, which the store reads first for the sweep after the commit.
                         legacy_files = await _del_store.purge_bank_rows(conn=conn, fq_table=fq_table, bank_id=bank_id)
+                        # A cleared bank keeps its sessions (a deleted one cascades them away), but
+                        # not the documents they saved into: their next save starts over.
+                        if not delete_bank_profile:
+                            await self.sessions.forget_saves(conn, bank_id)
 
                         # Sweep extension-owned bank-scoped tables (audit receipts,
                         # per-bank policy state, ...). These scope by bank_id without

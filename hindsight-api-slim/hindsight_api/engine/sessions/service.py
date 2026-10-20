@@ -12,9 +12,13 @@ The protocol is plain request/response, so any server instance can take any requ
   session at a time (the operation's serialization key); a check that finds new moments when it
   finishes takes them too, the latest and heaviest first.
 - **save** (worker): writes the conversation's new turns into the session's document, as an append
-  to it, at the end of a turn (``retain: turns``) or when the session closes. Memories are extracted
+  to it, at the end of a turn (``retain: turns``) and when the session goes idle. Memories are extracted
   from the document as from any retained one. The session decides when to pay for extraction; the
   log itself is written on every append and costs no model call.
+- **idle** (worker): a timer, not a save. Queued by an append that leaves turns unsaved, it waits in
+  the queue until the session has been quiet for ``session_idle_ms`` and then queues a save. There is
+  no "close": a client that stops sending (finished, or crashed mid-turn) is the same thing, and its
+  last turns are saved either way.
 - **read** (``GET .../sessions/{id}/events?after=``): the log from a position, for a client that
   waits for a late note and for the UI that follows the session live.
 
@@ -24,6 +28,7 @@ and a check that dies mid-way is retried by the next worker that claims its oper
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
@@ -40,6 +45,8 @@ from ..db_utils import acquire_with_retry
 from ..schema import fq_table
 from . import watch as W
 from .models import (
+    MAX_EVENT_TEXT,
+    ContentPart,
     SessionAppendRequest,
     SessionAppendResponse,
     SessionEvent,
@@ -59,6 +66,7 @@ logger = logging.getLogger(__name__)
 
 CHECK_TASK = "session_check"
 SAVE_TASK = "session_save"
+IDLE_TASK = "session_idle"
 # Moments one check takes before it hands over: a session that keeps producing moments still gets
 # its notes written, and the next queued check carries on.
 MAX_ROUNDS = 4
@@ -76,6 +84,70 @@ DEFAULT_SAVE_CONTEXT = (
 # has always saved its transcripts: tool output is mechanical noise for extraction.
 _ACTION_TARGET_KEYS = ("file_path", "path", "notebook_path", "command", "cmd", "pattern", "query", "url", "name", "id")
 _ACTION_TARGET_CAP = 100
+
+
+class ClientEvent(BaseModel):
+    """One entry of the session log, as the client's messages become it: what was said, each tool
+    call, each tool result, a state snapshot, a turn end. The log, the watcher and the UI read these;
+    the client only ever sends messages."""
+
+    id: str
+    kind: str
+    ts: datetime | None = None
+    payload: dict[str, Any]
+
+
+def _text_of(content: str | list[ContentPart] | None) -> str:
+    if isinstance(content, list):
+        content = "\n".join(p.text for p in content if p.type == "text" and p.text)
+    return (content or "")[:MAX_EVENT_TEXT]
+
+
+def _arguments(raw: str | dict[str, Any]) -> dict[str, Any]:
+    """OpenAI sends a tool's arguments as a JSON string; anything that is not an object is kept whole."""
+    if isinstance(raw, dict):
+        return raw
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        parsed = None
+    return parsed if isinstance(parsed, dict) else {"arguments": raw[:MAX_EVENT_TEXT]}
+
+
+def client_events(request: SessionAppendRequest) -> list[ClientEvent]:
+    """The request's messages (and state) as log entries, each with an id derived from the client's:
+    a message's text keeps the message id, each of its tool calls gets ``<message id>:<call id>``. The
+    turn end's id needs the log, so the append adds it."""
+    out: list[ClientEvent] = []
+    for m in request.messages:
+        text = _text_of(m.content)
+        if m.role == "tool":
+            payload: dict[str, Any] = {"role": "tool", "call_id": m.tool_call_id or "", "text": text}
+            if m.is_error:
+                payload["is_error"] = True
+            out.append(ClientEvent(id=m.id, kind="tool_result", ts=m.ts, payload=payload))
+            continue
+        if text.strip():
+            out.append(ClientEvent(id=m.id, kind="message", ts=m.ts, payload={"role": m.role, "text": text}))
+        for c in m.tool_calls or []:
+            out.append(
+                ClientEvent(
+                    id=f"{m.id}:{c.id}",
+                    kind="tool_call",
+                    ts=m.ts,
+                    payload={
+                        "role": "assistant",
+                        "tool": c.function.name,
+                        "call_id": c.id,
+                        "input": _arguments(c.function.arguments),
+                    },
+                )
+            )
+    if request.state is not None:
+        # The same snapshot sent twice is one entry: nothing changed in between.
+        digest = hashlib.sha1(json.dumps(request.state, sort_keys=True).encode()).hexdigest()[:16]
+        out.append(ClientEvent(id=f"state:{digest}", kind="state", payload={"role": "system", "data": request.state}))
+    return out
 
 
 def default_document_id(session_id: str) -> str:
@@ -190,7 +262,8 @@ class SessionService:
         await self._authorize(bank_id, request_context, write=BankWriteOperation.APPEND_SESSION_EVENTS)
         backend = await engine._get_backend()
         opts = request.session
-        if not request.events and opts is None:
+        incoming = client_events(request)
+        if not incoming and not request.turn_end and opts is None:
             return await self._poll(bank_id, session_id, request.ack)
         async with acquire_with_retry(backend) as conn:
             async with conn.transaction():
@@ -200,21 +273,19 @@ class SessionService:
                 await conn.execute(
                     f"""
                     INSERT INTO {fq_table("sessions")}
-                        (bank_id, session_id, document_id, title, source, settings, metadata)
-                    VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
+                        (bank_id, session_id, document_id, settings, metadata)
+                    VALUES ($1, $2, $3, $4::jsonb, $5::jsonb)
                     ON CONFLICT DO NOTHING
                     """,
                     bank_id,
                     session_id,
                     (opts.document_id if opts and opts.document_id else default_document_id(session_id)),
-                    opts.title if opts else None,
-                    opts.source if opts else None,
                     json.dumps(_settings_of(opts)),
                     json.dumps(opts.metadata if opts and opts.metadata else {}),
                 )
                 row = await conn.fetchrow(
                     f"""
-                    SELECT next_seq, acked_seq, settings, metadata, watch_state, checking_since, title, source
+                    SELECT next_seq, acked_seq, settings, metadata, watch_state, checking_since
                     FROM {fq_table("sessions")}
                     WHERE bank_id = $1 AND session_id = $2
                     FOR UPDATE
@@ -229,8 +300,25 @@ class SessionService:
                 }
                 state = W.WatchState.model_validate(conn.parse_json(row["watch_state"]) or {})
 
+                if request.turn_end:
+                    # A turn end is named after what it ends, so one sent again with nothing new in
+                    # between (a retry, two hooks at the end of one turn) is stored once.
+                    last = next((e.id for e in reversed(incoming) if e.kind != "state"), None)
+                    if last is None:
+                        last = await conn.fetchval(
+                            f"""
+                            SELECT event_id FROM {fq_table("session_events")}
+                            WHERE bank_id = $1 AND session_id = $2 AND source = 'client' AND kind NOT IN ('turn_end', 'state')
+                            ORDER BY seq DESC LIMIT 1
+                            """,
+                            bank_id,
+                            session_id,
+                        )
+                    incoming.append(
+                        ClientEvent(id=f"turn_end:{last or ''}", kind="turn_end", payload={"role": "assistant"})
+                    )
                 # A retried append resends events already stored: find them by id.
-                ids = list(dict.fromkeys(e.id for e in request.events))
+                ids = list(dict.fromkeys(e.id for e in incoming))
                 known: set[str] = set()
                 if ids:
                     known = {
@@ -248,13 +336,13 @@ class SessionService:
                 seq = int(row["next_seq"])
                 rows: list[tuple[int, str, str, datetime | None, str]] = []
                 seen: set[str] = set()
-                for event in request.events:
+                for event in incoming:
                     if event.id in known or event.id in seen:
                         continue
                     seen.add(event.id)
-                    payload = event.model_dump(mode="json", exclude={"id", "kind", "ts"}, exclude_defaults=True)
+                    payload = event.payload
                     if settings["watch"]:
-                        step = W.step_of(event.kind, event.role, payload)
+                        step = W.step_of(event.kind, payload["role"], payload)
                         if step is not None:
                             W.read_step(state, step, seq)
                     rows.append((seq, event.id, event.kind, event.ts, json.dumps(payload)))
@@ -294,10 +382,9 @@ class SessionService:
                         UPDATE {fq_table("sessions")}
                         SET next_seq = $3, event_count = event_count + $4, acked_seq = $5,
                             watch_state = $6::jsonb, settings = $7::jsonb, metadata = $8::jsonb,
-                            title = COALESCE($9, title), source = COALESCE($10, source),
-                            last_event_at = CASE WHEN $11 > 0 THEN now() ELSE last_event_at END,
-                            pending_since = CASE WHEN $12 = 1 THEN COALESCE(pending_since, now()) ELSE NULL END,
-                            status = 'open', updated_at = now()
+                            last_event_at = CASE WHEN $9 > 0 THEN now() ELSE last_event_at END,
+                            pending_since = CASE WHEN $10 = 1 THEN COALESCE(pending_since, now()) ELSE NULL END,
+                            updated_at = now()
                         WHERE bank_id = $1 AND session_id = $2
                         """,
                         bank_id,
@@ -308,14 +395,14 @@ class SessionService:
                         state.model_dump_json(),
                         json.dumps(settings),
                         json.dumps(metadata),
-                        opts.title if opts else None,
-                        opts.source if opts else None,
                         len(rows),
                         1 if state.pending is not None else 0,
                     )
                 notes = await self._notes_after(
                     conn, bank_id, session_id, request.ack if request.ack is not None else acked
                 )
+                if notes:
+                    await self._hand_off(conn, bank_id, session_id, notes, [r[0] for r in rows])
                 checking = settings["watch"] and _checking(state, row["checking_since"])
         if created_bank:
             await engine._apply_default_bank_template(bank_id, request_context)
@@ -324,14 +411,10 @@ class SessionService:
             await self._queue_check(bank_id, session_id, request_context)
         if turn_ended and settings["retain"] == "turns":
             await self._queue_save(bank_id, session_id, request_context)
-        return SessionAppendResponse(
-            session_id=session_id,
-            accepted=len(rows),
-            duplicates=len(request.events) - len(rows),
-            last_seq=seq - 1,
-            notes=notes,
-            checking=checking,
-        )
+        elif rows and settings["retain"] != "off":
+            # At most one idle timer waits per session (dedupe): it covers every append after it.
+            await self._queue(IDLE_TASK, "session-idle", bank_id, session_id, request_context)
+        return SessionAppendResponse(notes=notes, checking=checking)
 
     async def _poll(self, bank_id: str, session_id: str, ack: int | None) -> SessionAppendResponse:
         """An append with no events: what a client sends to fetch notes. No lock and no write but the
@@ -347,9 +430,7 @@ class SessionService:
                 session_id,
             )
             if row is None:
-                return SessionAppendResponse(
-                    session_id=session_id, accepted=0, duplicates=0, last_seq=0, notes=[], checking=False
-                )
+                return SessionAppendResponse(notes=[], checking=False)
             acked = int(row["acked_seq"])
             if ack is not None and ack > acked:
                 await conn.execute(
@@ -364,19 +445,58 @@ class SessionService:
                 acked = ack
             settings = _settings_of(None, conn.parse_json(row["settings"]))
             state = W.WatchState.model_validate(conn.parse_json(row["watch_state"]) or {})
+            notes = await self._notes_after(conn, bank_id, session_id, ack if ack is not None else acked)
+            # Locks only when a note goes out for the first time: polls stay lock-free otherwise.
+            if notes and len(await self._handed(conn, bank_id, session_id, notes)) < len(notes):
+                async with conn.transaction():
+                    await conn.fetchval(
+                        f"SELECT 1 FROM {fq_table('sessions')} WHERE bank_id = $1 AND session_id = $2 FOR UPDATE",
+                        bank_id,
+                        session_id,
+                    )
+                    await self._hand_off(conn, bank_id, session_id, notes, [])
             return SessionAppendResponse(
-                session_id=session_id,
-                accepted=0,
-                duplicates=0,
-                last_seq=int(row["next_seq"]) - 1,
-                notes=await self._notes_after(conn, bank_id, session_id, ack if ack is not None else acked),
+                notes=notes,
                 checking=bool(settings["watch"]) and _checking(state, row["checking_since"]),
             )
+
+    async def _handed(self, conn: Any, bank_id: str, session_id: str, notes: list[SessionNote]) -> set[str]:
+        return {
+            r["event_id"]
+            for r in await conn.fetch(
+                f"""
+                SELECT event_id FROM {fq_table("session_events")}
+                WHERE bank_id = $1 AND session_id = $2 AND event_id = ANY($3)
+                """,
+                bank_id,
+                session_id,
+                [f"handoff:{n.seq}" for n in notes],
+            )
+        }
+
+    async def _hand_off(
+        self, conn: Any, bank_id: str, session_id: str, notes: list[SessionNote], with_seqs: list[int]
+    ) -> None:
+        """Logs the moment each note first goes back to the client, as a ``handoff`` entry naming the
+        events whose reply carried it (none for a poll), so any reader of the log sees when the agent
+        got it, whatever the client. A note is sent again until acknowledged; its handoff id is fixed
+        (``handoff:<note seq>``), so only the first send is logged. Needs the session row locked."""
+        handed = await self._handed(conn, bank_id, session_id, notes)
+        for n in notes:
+            if f"handoff:{n.seq}" not in handed:
+                await self._log(
+                    conn,
+                    bank_id,
+                    session_id,
+                    "handoff",
+                    {"note_seq": n.seq, "with_seqs": with_seqs},
+                    event_id=f"handoff:{n.seq}",
+                )
 
     async def _notes_after(self, conn: Any, bank_id: str, session_id: str, after: int) -> list[SessionNote]:
         rows = await conn.fetch(
             f"""
-            SELECT seq, payload, created_at FROM {fq_table("session_events")}
+            SELECT seq, payload FROM {fq_table("session_events")}
             WHERE bank_id = $1 AND session_id = $2 AND source = 'hindsight' AND kind = 'note' AND seq > $3
             ORDER BY seq
             """,
@@ -391,10 +511,7 @@ class SessionService:
                 SessionNote(
                     seq=int(r["seq"]),
                     text=p.get("text", ""),
-                    trigger=p.get("trigger", ""),
-                    memory_ids=p.get("memory_ids") or [],
                     source=SessionNoteSource.model_validate(p["source"]) if p.get("source") else None,
-                    created_at=r["created_at"],
                 )
             )
         return notes
@@ -434,6 +551,43 @@ class SessionService:
         # Its own serialization key: a save does not wait behind a check's reflect, nor a check
         # behind a save.
         await self._queue(SAVE_TASK, "session-save", bank_id, session_id, request_context)
+
+    async def run_idle(self, task: dict[str, Any]) -> None:
+        """Queue a save once the session has gone quiet with turns not yet saved.
+
+        Not a save itself: a save queued at a turn end must not wait behind this timer, so the timer
+        is its own operation and hands over to the save job. Measured by the database's clock, like
+        the check's settle wait."""
+        bank_id: str = task["bank_id"]
+        session_id: str = task["session_id"]
+        backend = await self._engine._get_backend()
+        async with acquire_with_retry(backend) as conn:
+            row = await conn.fetchrow(
+                f"""
+                SELECT last_event_at, saved_seq, now() AS db_now
+                FROM {fq_table("sessions")} WHERE bank_id = $1 AND session_id = $2
+                """,
+                bank_id,
+                session_id,
+            )
+            unsaved = row is not None and await conn.fetchval(
+                f"""
+                SELECT 1 FROM {fq_table("session_events")}
+                WHERE bank_id = $1 AND session_id = $2 AND source = 'client' AND seq > $3
+                LIMIT 1
+                """,
+                bank_id,
+                session_id,
+                int(row["saved_seq"]),
+            )
+        if not unsaved or row["last_event_at"] is None:
+            return
+        idle_at = row["last_event_at"] + timedelta(milliseconds=get_config().session_idle_ms)
+        if idle_at > row["db_now"]:
+            if not self._engine._task_backend.can_defer:
+                return  # the in-process test backend: turn ends still save
+            raise DeferOperation(exec_date=idle_at, reason="waiting for the session to go idle")
+        await self._queue_save(bank_id, session_id, self._task_context(task))
 
     # ------------------------------------------------------------------ check (worker)
 
@@ -620,7 +774,9 @@ class SessionService:
                     1 if spoke else 0,
                 )
 
-    async def _log(self, conn: Any, bank_id: str, session_id: str, kind: str, payload: dict[str, Any]) -> int:
+    async def _log(
+        self, conn: Any, bank_id: str, session_id: str, kind: str, payload: dict[str, Any], event_id: str = ""
+    ) -> int:
         """Append one of Hindsight's own entries (a check, a note, a save) to the session log, at the
         next position. Needs the session row locked."""
         seq = int(
@@ -638,7 +794,7 @@ class SessionService:
             bank_id,
             session_id,
             seq,
-            f"hindsight:{seq}",
+            event_id or f"hindsight:{seq}",
             kind,
             json.dumps(payload, default=str),
         )
@@ -677,7 +833,6 @@ class SessionService:
                         document_id=unit["document_id"],
                         quote=quote,
                         mentioned_at=unit.get("mentioned_at"),
-                        metadata=doc.get("document_metadata") or {},
                     )
             if sources:
                 return SessionNoteSource(
@@ -707,7 +862,7 @@ class SessionService:
             async with conn.transaction():
                 row = await conn.fetchrow(
                     f"""
-                    SELECT document_id, settings, metadata, source, created_at, next_seq, saved_seq, save_plan
+                    SELECT document_id, settings, metadata, created_at, next_seq, saved_seq, save_plan
                     FROM {fq_table("sessions")} WHERE bank_id = $1 AND session_id = $2 FOR UPDATE
                     """,
                     bank_id,
@@ -777,11 +932,18 @@ class SessionService:
             )
         async with acquire_with_retry(backend) as conn:
             async with conn.transaction():
-                await conn.fetchrow(
-                    f"SELECT 1 FROM {fq_table('sessions')} WHERE bank_id = $1 AND session_id = $2 FOR UPDATE",
+                current = await conn.fetchval(
+                    f"SELECT save_plan FROM {fq_table('sessions')} WHERE bank_id = $1 AND session_id = $2 FOR UPDATE",
                     bank_id,
                     session_id,
                 )
+                # The document was deleted (or the bank cleared) while this save ran: forget_saves
+                # dropped the plan so the next save rewrites the whole conversation. Moving saved_seq
+                # now would undo that. ponytail: the turns this retain wrote may land twice in the
+                # rebuilt document; a replace-mode save would fix it if it ever matters.
+                stored = conn.parse_json(current)
+                if not stored or SavePlan.model_validate(stored).operation_id != plan.operation_id:
+                    return
                 await self._log(
                     conn,
                     bank_id,
@@ -804,6 +966,29 @@ class SessionService:
                     session_id,
                     plan.upto_seq,
                 )
+                # All saved: the idle timer waiting on this session has nothing left to do. Left in the
+                # queue it reads as unfinished work for ten minutes after every turn (a bank that never
+                # settles), so it goes now. Under the session lock: an append that brings new turns
+                # either committed before (they are unsaved, the timer stays) or queues a new timer after.
+                if not await conn.fetchval(
+                    f"""
+                    SELECT 1 FROM {fq_table("session_events")}
+                    WHERE bank_id = $1 AND session_id = $2 AND source = 'client' AND seq > $3
+                    LIMIT 1
+                    """,
+                    bank_id,
+                    session_id,
+                    plan.upto_seq,
+                ):
+                    await conn.execute(
+                        f"""
+                        DELETE FROM {fq_table("async_operations")}
+                        WHERE bank_id = $1 AND operation_type = '{IDLE_TASK}' AND status = 'pending'
+                          AND task_payload->>'session_id' = $2
+                        """,
+                        bank_id,
+                        session_id,
+                    )
 
     # ------------------------------------------------------------------ reads
 
@@ -822,7 +1007,7 @@ class SessionService:
         async with acquire_with_retry(backend) as conn:
             head = await conn.fetchrow(
                 f"""
-                SELECT next_seq, status, watch_state, checking_since, settings FROM {fq_table("sessions")}
+                SELECT next_seq, watch_state, checking_since, settings FROM {fq_table("sessions")}
                 WHERE bank_id = $1 AND session_id = $2
                 """,
                 bank_id,
@@ -858,7 +1043,6 @@ class SessionService:
                     for r in rows
                 ],
                 last_seq=int(head["next_seq"]) - 1,
-                status=head["status"],
                 checking=bool(settings["watch"]) and _checking(state, head["checking_since"]),
             )
 
@@ -868,9 +1052,6 @@ class SessionService:
         return SessionSummary(
             session_id=r["session_id"],
             document_id=r["document_id"],
-            title=r["title"],
-            source=r["source"],
-            status=r["status"],
             watch=bool(settings["watch"]),
             retain=settings["retain"],
             event_count=int(r["event_count"]),
@@ -892,7 +1073,7 @@ class SessionService:
         # Delivered notes, counted where the client's acknowledgement reached: one indexed range
         # read per session, so the list can say how many of a session's notes reached the agent.
         return (
-            "s.session_id, s.document_id, s.title, s.source, s.status, s.settings, s.metadata, s.watch_state, "
+            "s.session_id, s.document_id, s.settings, s.metadata, s.watch_state, "
             "s.next_seq, s.saved_seq, s.acked_seq, s.event_count, s.check_count, s.note_count, s.checking_since, "
             "s.created_at, s.updated_at, s.last_event_at, "
             f"(SELECT COUNT(*) FROM {fq_table('session_events')} e WHERE e.bank_id = s.bank_id "
@@ -926,7 +1107,7 @@ class SessionService:
         args: list[Any] = [bank_id]
         if q:
             args.append(f"%{q.lower()}%")
-            where += f" AND (LOWER(session_id) LIKE ${len(args)} OR LOWER(COALESCE(title, '')) LIKE ${len(args)})"
+            where += f" AND LOWER(session_id) LIKE ${len(args)}"
         async with acquire_with_retry(backend) as conn:
             total = int(await conn.fetchval(f"SELECT COUNT(*) FROM {fq_table('sessions')} WHERE {where}", *args))
             rows = await conn.fetch(
@@ -942,26 +1123,6 @@ class SessionService:
                 items=[self._summary(conn, r) for r in rows], total=total, limit=limit, offset=offset
             )
 
-    async def close(self, bank_id: str, session_id: str, *, request_context: RequestContext) -> SessionSummary:
-        engine = self._engine
-        await self._authorize(bank_id, request_context, write=BankWriteOperation.CLOSE_SESSION)
-        backend = await engine._get_backend()
-        async with acquire_with_retry(backend) as conn:
-            status = await conn.execute(
-                f"""
-                UPDATE {fq_table("sessions")} SET status = 'closed', updated_at = now()
-                WHERE bank_id = $1 AND session_id = $2
-                """,
-                bank_id,
-                session_id,
-            )
-            if status.endswith(" 0"):
-                raise SessionNotFoundError(session_id)
-        summary = await self._fetch(bank_id, session_id)
-        if summary.retain != "off":
-            await self._queue_save(bank_id, session_id, request_context)
-        return summary
-
     async def delete(self, bank_id: str, session_id: str, *, request_context: RequestContext) -> None:
         """Delete the session and its log. The document it saved stays: that is memory now, and is
         deleted as a document. A check or save still queued for it finds no session and does nothing."""
@@ -974,3 +1135,18 @@ class SessionService:
             )
         if status.endswith(" 0"):
             raise SessionNotFoundError(session_id)
+
+    @staticmethod
+    async def forget_saves(conn: Any, bank_id: str, document_id: str | None = None) -> None:
+        """The document a session saved into is gone (deleted, or the bank cleared): start its saves over.
+
+        A save appends the turns after ``saved_seq`` to the document, so against a missing document it
+        would write only the tail. Back to 0, with no plan, the next save rewrites the whole
+        conversation from the log. Runs on the caller's connection, inside the delete's transaction.
+        ``document_id`` None means every session of the bank.
+        """
+        sql = f"UPDATE {fq_table('sessions')} SET saved_seq = 0, save_plan = NULL WHERE bank_id = $1"
+        if document_id is None:
+            await conn.execute(sql, bank_id)
+        else:
+            await conn.execute(f"{sql} AND document_id = $2", bank_id, document_id)

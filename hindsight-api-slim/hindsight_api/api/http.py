@@ -8262,7 +8262,7 @@ def _register_routes(app: FastAPI):
     )
     async def api_list_sessions(
         bank_id: str,
-        q: str | None = Query(default=None, description="Case-insensitive match on the session id or title"),
+        q: str | None = Query(default=None, description="Case-insensitive match on the session id"),
         limit: int = Query(default=50, ge=0, le=500),
         offset: int = Query(default=0, ge=0),
         request_context: RequestContext = Depends(get_request_context),
@@ -8326,30 +8326,6 @@ def _register_routes(app: FastAPI):
             raise
         except Exception as e:
             raise _internal_error(e, f"/v1/default/banks/{bank_id}/sessions/{session_id}")
-
-    @app.post(
-        "/v1/default/banks/{bank_id}/sessions/{session_id}/close",
-        response_model=SessionSummary,
-        summary="Close a session",
-        description="Mark the session finished. A later append opens it again.",
-        operation_id="close_session",
-        tags=["Sessions"],
-    )
-    async def api_close_session(
-        bank_id: str,
-        session_id: str,
-        request_context: RequestContext = Depends(get_request_context),
-    ):
-        try:
-            return await app.state.memory.sessions.close(bank_id, session_id, request_context=request_context)
-        except SessionNotFoundError:
-            raise HTTPException(status_code=404, detail="Session not found")
-        except OperationValidationError as e:
-            raise HTTPException(status_code=e.status_code, detail=e.reason)
-        except (AuthenticationError, HTTPException):
-            raise
-        except Exception as e:
-            raise _internal_error(e, f"/v1/default/banks/{bank_id}/sessions/{session_id}/close")
 
     @app.get(
         "/v1/default/banks/{bank_id}/documents/{document_id:path}/history",

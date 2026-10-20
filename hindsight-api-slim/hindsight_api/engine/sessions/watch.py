@@ -62,10 +62,15 @@ CONFLICT_Q = (
     "check tests is never a conflict. If nothing conflicts, reply with nothing."
 )
 
-# Tools that change a file. Claude Code's names, plus the ones other agents use for the same thing.
-EDIT_TOOLS = frozenset({"edit", "write", "multiedit", "notebookedit", "apply_patch", "str_replace_editor"})
-# Tools that run a command.
-COMMAND_TOOLS = frozenset({"bash", "shell", "exec_command", "run_command", "terminal"})
+# A tool is known by what its name says, not by one agent's names: Claude Code's Edit/Write/Bash,
+# Codex's apply_patch/shell and Hermes's write_file/patch/terminal read the same. (A fixed list of
+# Claude Code's names came first; every other client had to rename its tools to be watched.)
+EDIT_WORDS = ("edit", "write", "patch", "replace", "insert", "multiedit", "notebookedit")
+COMMAND_WORDS = frozenset({"bash", "shell", "sh", "terminal", "exec", "execute", "run", "command", "cmd"})
+# Keys a tool's arguments name its target with, across agents.
+TARGET_KEYS = ("command", "cmd", "file_path", "path", "notebook_path", "filename", "pattern", "query", "url")
+# Keys that carry the new text of an edit, when the client sends no diff.
+EDIT_TEXT_KEYS = ("new_string", "content", "patch", "diff", "new_str", "file_text", "input")
 # Commands that change nothing, or only run checks: no moment.
 READ_ONLY_CMD = re.compile(
     r"^\s*(cd [^;&|]+(&&|;)\s*)?(cat|ls|find|grep|rg|head|tail|wc|tree|file|which|pwd|echo|sed -n|awk|"
@@ -149,6 +154,28 @@ def step_of(kind: str, role: str, event: dict[str, Any]) -> Step | None:
     return None
 
 
+def tool_family(name: str) -> Literal["edit", "command", "other"]:
+    # Whole words of the name (`str_replace_editor`, `TodoWrite`, `write_file`), so `dispatch` is no patch.
+    words = re.findall(r"[a-z]+", re.sub(r"([a-z])([A-Z])", r"\1_\2", name).lower())
+    if "todo" in words:  # a to-do list the agent writes is not the project's code
+        return "other"
+    if any(w.startswith(EDIT_WORDS) for w in words):
+        return "edit"
+    if COMMAND_WORDS.intersection(words):
+        return "command"
+    return "other"
+
+
+def _target(inp: dict[str, Any]) -> str:
+    return str(next((inp[k] for k in TARGET_KEYS if inp.get(k)), ""))
+
+
+def _edit_text(inp: dict[str, Any]) -> str:
+    """An edit in words when there is no diff: the file and its new text."""
+    new = next((inp[k] for k in EDIT_TEXT_KEYS if isinstance(inp.get(k), str) and inp[k].strip()), "")
+    return f"Change to {_target(inp)}:\n{new}"[:3000] if new else ""
+
+
 def _is_own_note(state: WatchState, text: str) -> bool:
     return OWN_NOTE_MARK in text or any(s[:80] in text for s in state.sent if len(s) >= 40)
 
@@ -186,11 +213,8 @@ def read_step(state: WatchState, step: Step, seq: int = 0) -> None:
         state.tools[step.id] = (tool, step.input)
         if len(state.tools) > OPEN_TOOL_CALLS:
             state.tools = dict(list(state.tools.items())[-OPEN_TOOL_CALLS:])
-        inp = step.input
-        what = str(
-            inp.get("command") or inp.get("cmd") or inp.get("file_path") or inp.get("pattern") or inp.get("path") or ""
-        )
-        if tool in COMMAND_TOOLS and not READ_ONLY_CMD.match(what):
+        what = _target(step.input)
+        if tool_family(tool) == "command" and not READ_ONLY_CMD.match(what):
             said = f"agent runs: {_clip(what, 300)}"
             trigger, text = "command", what
         else:
@@ -199,9 +223,10 @@ def read_step(state: WatchState, step: Step, seq: int = 0) -> None:
         tool, inp = state.tools.pop(step.id, ("", {}))
         if _is_own_note(state, step.text):
             said = "the agent was given the watcher's note"
-        elif tool in EDIT_TOOLS:
-            said = f"agent edited {inp.get('file_path') or inp.get('notebook_path') or inp.get('path') or ''}"
-            trigger = "edit"
+        elif tool_family(tool) == "edit":
+            said = f"agent edited {_target(inp)}"
+            # Judged by the client's diff when it sends one (a `state`), else by the edit's own text.
+            trigger, text = "edit", _edit_text(inp)
         elif (step.error or FAILED.search(step.text)) and not ENV_TROUBLE.search(step.text):
             said = f"it failed: {step.text[-300:]}"
             trigger, text = "failure", step.text[-2000:]
@@ -244,7 +269,7 @@ def search_queries(m: Moment) -> list[str]:
     paragraphs: as one query, a harness's boilerplate (role, rules, "work efficiently") outweighed the
     request and the heads-up never saw the decision. An edit is searched by its diff in words,
     anything else by its own text."""
-    if m.trigger == "edit":
+    if m.trigger == "edit" and m.diff.strip():
         return [query_from_diff(m.diff)]
     if m.trigger != "task":
         return [m.text[:1500]]
@@ -267,11 +292,16 @@ def question(m: Moment) -> str:
     return HEADSUP_Q if m.trigger == "task" else CONFLICT_Q
 
 
+def _by_diff(m: Moment) -> bool:
+    """An edit is judged by the client's diff of the whole change when there is one."""
+    return m.trigger == "edit" and bool(m.diff.strip())
+
+
 def situation(goal: str, m: Moment, sent: list[str]) -> str:
     """The moment as reflect's context: what the question is about, in the agent's own voice."""
     parts = [f"MY REQUEST:\n{goal[:3000]}"]
     if m.trigger != "task":
-        doing = _clip_diff(m.diff, 6000) if m.trigger == "edit" else m.text[:3000]
+        doing = _clip_diff(m.diff, 6000) if _by_diff(m) else m.text[:3000]
         parts.append(f"WHAT I JUST DID ({m.trigger}):\n{doing}")
         if m.recent:
             parts.append("MY RECENT STEPS:\n" + "\n".join(m.recent[-8:]))
@@ -285,7 +315,7 @@ def situation(goal: str, m: Moment, sent: list[str]) -> str:
 def moment_key(m: Moment) -> str:
     """The same situation is never judged twice (an edit is its diff)."""
     return hashlib.sha1(
-        json.dumps([m.trigger, "" if m.trigger == "edit" else m.text.strip(), m.diff.strip()]).encode(),
+        json.dumps([m.trigger, "" if _by_diff(m) else m.text.strip(), m.diff.strip()]).encode(),
         usedforsecurity=False,
     ).hexdigest()
 
@@ -294,7 +324,7 @@ def skip_reason(state: WatchState, m: Moment) -> str | None:
     """Why the moment is not worth a reflect call, or None (and then it is recorded as judged)."""
     if len(state.sent) >= MAX_NOTES:
         return "note limit reached"
-    if not (m.diff if m.trigger == "edit" else m.text).strip():
+    if not (m.diff if _by_diff(m) else m.text).strip():
         return "nothing to judge"
     key = moment_key(m)
     if key in state.judged:

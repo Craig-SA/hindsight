@@ -424,7 +424,6 @@ class BankWriteOperation(StrEnum):
     CLEAR_MENTAL_MODEL = "clear_mental_model"
     CLEAR_OBSERVATIONS = "clear_observations"
     CLEAR_OBSERVATIONS_FOR_MEMORY = "clear_observations_for_memory"
-    CLOSE_SESSION = "close_session"
     CREATE_BANK_ALIAS = "create_bank_alias"
     CREATE_DIRECTIVE = "create_directive"
     CREATE_KNOWLEDGE_FOLDER = "create_knowledge_folder"

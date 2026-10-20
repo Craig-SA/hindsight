@@ -15,7 +15,7 @@ import time
 import uuid
 
 import pytest
-from hindsight_client_api.models import SessionAppendRequest, SessionEventIn, SessionOptions
+from hindsight_client_api.models import SessionAppendRequest, SessionMessage, SessionOptions
 
 from hindsight_system_tests.payloads import extracted, fact, observes
 from hindsight_system_tests.reflect import reflect_loop
@@ -58,11 +58,11 @@ async def test_a_watched_session_hears_the_decision_once_and_its_turn_is_saved(c
         decided_bank,
         session,
         SessionAppendRequest(
-            session=SessionOptions(watch=True, retain="turns", title="parse_quantity"),
-            events=[SessionEventIn(id="1", role="user", kind="message", text=REQUEST)],
+            session=SessionOptions(watch=True, retain="turns"),
+            messages=[SessionMessage.from_dict({"id": "1", "role": "user", "content": REQUEST})],
         ),
     )
-    assert r.accepted == 1 and r.notes == [], "the append never waits for the check"
+    assert r.notes == [], "the append never waits for the check"
 
     log = await _log(client, decided_bank, session, kind="note")
     check = next(e for e in log if e.kind == "check")
@@ -70,11 +70,10 @@ async def test_a_watched_session_hears_the_decision_once_and_its_turn_is_saved(c
     assert check.payload["outcome"] == "note" and check.payload["moment_seq"] == 1
 
     # Handed back on the next append, until acknowledged.
-    r = await client.sessions.append_session_events(decided_bank, session, SessionAppendRequest(events=[]))
+    r = await client.sessions.append_session_events(decided_bank, session, SessionAppendRequest())
     assert [n.text for n in r.notes] == [NOTE]
     note = r.notes[0]
-    assert note.trigger == "task"
-    r = await client.sessions.append_session_events(decided_bank, session, SessionAppendRequest(events=[], ack=note.seq))
+    r = await client.sessions.append_session_events(decided_bank, session, SessionAppendRequest(ack=note.seq))
     assert r.notes == []
 
     # The same request again is not judged twice; the end of the turn saves the conversation.
@@ -82,17 +81,19 @@ async def test_a_watched_session_hears_the_decision_once_and_its_turn_is_saved(c
         decided_bank,
         session,
         SessionAppendRequest(
-            events=[
-                SessionEventIn(id="1", role="user", kind="message", text=REQUEST),  # a retry: stored once
-                SessionEventIn(id="2", role="assistant", kind="message", text="Reading parse_quantity as binary."),
-                SessionEventIn(id="3", role="assistant", kind="turn_end"),
+            messages=[
+                SessionMessage.from_dict({"id": "1", "role": "user", "content": REQUEST}),  # a retry: stored once
+                SessionMessage.from_dict(
+                    {"id": "2", "role": "assistant", "content": "Reading parse_quantity as binary."}
+                ),
             ],
+            turn_end=True,
             ack=note.seq,
         ),
     )
     log = await _log(client, decided_bank, session, kind="save")
     await settled(decided_bank)
-    assert [e.event_id for e in log if e.source == "client"] == ["1", "2", "3"]
+    assert [e.event_id for e in log if e.source == "client"] == ["1", "2", "turn_end:2"]
 
     doc = await client.documents.get_document(decided_bank, f"session:{session}")
     lines = [json.loads(line) for line in doc.original_text.splitlines()]

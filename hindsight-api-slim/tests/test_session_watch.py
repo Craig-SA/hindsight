@@ -181,3 +181,28 @@ def test_the_same_request_with_other_whitespace_is_judged_once_and_a_note_never_
     assert W.skip_reason(s, a) is None and W.skip_reason(s, b) == "already judged"
     assert W.accept_note(s, a, "Before you change round_cents: half cents round down.", ["m1"])
     assert not W.accept_note(s, a, "Before you change round_cents: half cents round down.", ["m2"])
+
+
+def test_tools_are_known_by_what_their_names_say_not_by_one_agents_names():
+    for name in ("Edit", "MultiEdit", "apply_patch", "str_replace_editor", "write_file", "patch"):
+        assert W.tool_family(name) == "edit", name
+    for name in ("Bash", "shell", "exec_command", "terminal"):
+        assert W.tool_family(name) == "command", name
+    for name in ("Read", "read_file", "search_files", "TodoWrite", "dispatch_task"):
+        assert W.tool_family(name) == "other", name
+
+
+def test_an_edit_without_a_diff_is_judged_by_its_own_text():
+    s = W.WatchState()
+    _feed(
+        s,
+        (
+            "tool_call",
+            "assistant",
+            {"tool": "patch", "call_id": "p", "input": {"path": "pay.py", "new_string": "HALF_UP"}},
+        ),
+        ("tool_result", "tool", {"call_id": "p", "text": "ok"}),
+    )
+    m = W.take_moment(s)
+    assert m is not None and m.trigger == "edit" and W.search_queries(m) == ["Change to pay.py:\nHALF_UP"]
+    assert W.skip_reason(s, m) is None

@@ -7,36 +7,52 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-EventRole = Literal["user", "assistant", "tool", "system"]
-EventKind = Literal["message", "tool_call", "tool_result", "state", "turn_end"]
+MessageRole = Literal["user", "assistant", "tool", "system"]
 
-MAX_EVENTS_PER_APPEND = 500
+MAX_MESSAGES_PER_APPEND = 500
 MAX_EVENT_TEXT = 100_000
 
 
-class SessionEventIn(BaseModel):
-    """One thing that happened in the conversation, as the client saw it."""
+class ToolCallFunction(BaseModel):
+    name: str = Field(max_length=256)
+    arguments: str | dict[str, Any] = Field(
+        description="The tool's arguments: a JSON object, or the JSON string OpenAI sends."
+    )
+
+
+class ToolCall(BaseModel):
+    id: str = Field(min_length=1, max_length=256, description="Matched by the `tool` message that answers it.")
+    type: Literal["function"] = "function"
+    function: ToolCallFunction
+
+
+class ContentPart(BaseModel):
+    """A part of a message's content, as in the OpenAI format. Only text parts are read."""
+
+    type: str
+    text: str | None = None
+
+
+class SessionMessage(BaseModel):
+    """One message of the conversation, in the OpenAI chat format most agents already keep, plus the
+    client's own `id`. Unknown keys (a name, reasoning, ...) are ignored, so a client can send the
+    messages it already has as they are."""
 
     id: str = Field(
         min_length=1,
         max_length=256,
-        description="The client's id for this event, unique in the session. Sending it again is a no-op: "
+        description="The client's id for this message, unique in the session. Sending it again is a no-op: "
         "an append that is retried after a lost response stores nothing twice.",
     )
-    role: EventRole = Field(description="Who it came from: the user, the assistant, a tool, or the system.")
-    kind: EventKind = Field(
-        default="message",
-        description="`message`: something said. `tool_call`: the assistant calling a tool (`tool`, `input`, "
-        "`call_id`). `tool_result`: what the tool returned (`call_id`, `text`, `is_error`). `state`: a snapshot "
-        "of the work, not said by anyone (`data`, e.g. `{diff}` for a coding agent's change so far). "
-        "`turn_end`: the assistant finished its turn.",
+    role: MessageRole
+    content: str | list[ContentPart] | None = Field(
+        default=None, description="What was said: a string, or a list of parts whose text parts are read."
     )
-    text: str | None = Field(default=None, max_length=MAX_EVENT_TEXT)
-    tool: str | None = Field(default=None, max_length=256)
-    call_id: str | None = Field(default=None, max_length=256)
-    input: dict[str, Any] | None = None
-    is_error: bool = False
-    data: dict[str, Any] | None = None
+    tool_calls: list[ToolCall] | None = Field(default=None, description="The tools an assistant message calls.")
+    tool_call_id: str | None = Field(
+        default=None, max_length=256, description="On a `tool` message: the call it answers."
+    )
+    is_error: bool = Field(default=False, description="On a `tool` message: the tool failed.")
     ts: datetime | None = Field(default=None, description="When it happened, by the client's clock.")
 
 
@@ -44,10 +60,6 @@ class SessionOptions(BaseModel):
     """How the session is set up. Applied when an append creates the session; later appends that
     carry options update the fields they set."""
 
-    title: str | None = Field(default=None, max_length=1000)
-    source: str | None = Field(
-        default=None, max_length=256, description="What is sending the session, e.g. `claude-code`."
-    )
     document_id: str | None = Field(
         default=None,
         max_length=512,
@@ -58,10 +70,11 @@ class SessionOptions(BaseModel):
         default=None,
         description="Whether the memory watcher follows the session and may send notes back. Off by default.",
     )
-    retain: Literal["turns", "close", "off"] | None = Field(
+    retain: Literal["turns", "idle", "off"] | None = Field(
         default=None,
-        description="When the conversation is saved into its document: at the end of each turn (`turns`, the "
-        "default), only when the session closes (`close`), or never (`off`).",
+        description="When the conversation is saved into its document: at the end of each turn and when the "
+        "session goes idle (`turns`, the default), only when the session goes idle (`idle`: one extraction for "
+        "the whole session), or never (`off`).",
     )
     tags: list[str] | None = Field(default=None, description="Tags the saved document gets.")
     context: str | None = Field(
@@ -76,11 +89,26 @@ class SessionOptions(BaseModel):
         description="How observations built from the saved conversation are scoped, as on retain. The bank's "
         "default when unset.",
     )
-    metadata: dict[str, str] | None = None
+    metadata: dict[str, str] | None = Field(
+        default=None,
+        description="Free-form labels, merged across appends and copied onto the saved document. "
+        "`harness` names the client (e.g. `claude-code`): the UI shows its logo.",
+    )
 
 
 class SessionAppendRequest(BaseModel):
-    events: list[SessionEventIn] = Field(default_factory=list, max_length=MAX_EVENTS_PER_APPEND)
+    messages: list[SessionMessage] = Field(default_factory=list, max_length=MAX_MESSAGES_PER_APPEND)
+    state: dict[str, Any] | None = Field(
+        default=None,
+        description="A snapshot of the work after these messages, said by no one: for a coding agent "
+        '`{"diff": "..."}`, the `git diff` of everything it changed so far. The watcher judges an edit '
+        "against it. Never saved into memory.",
+    )
+    turn_end: bool = Field(
+        default=False,
+        description="The assistant finished its turn after these messages: the turn is saved into memory "
+        "(with `retain: turns`). Sent again with nothing new in between, it is the same turn end.",
+    )
     ack: int | None = Field(
         default=None,
         ge=0,
@@ -91,26 +119,23 @@ class SessionAppendRequest(BaseModel):
 
 
 class SessionNoteSource(BaseModel):
+    """Where a note comes from, so the agent can check it before acting on it."""
+
     document_id: str
     quote: str = Field(default="", description="The source's own sentence closest to the note, verbatim.")
     mentioned_at: datetime | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class SessionNote(BaseModel):
-    seq: int
+    """A note for the agent. What the watcher checked and the memories it used are in the session's
+    event log (the note's `note` entry and its `check`)."""
+
+    seq: int = Field(description="Its position in the log: acknowledge it by sending it back as `ack`.")
     text: str
-    trigger: str
-    memory_ids: list[str] = Field(default_factory=list)
     source: SessionNoteSource | None = None
-    created_at: datetime
 
 
 class SessionAppendResponse(BaseModel):
-    session_id: str
-    accepted: int = Field(description="Events stored by this append.")
-    duplicates: int = Field(description="Events already stored, by their id.")
-    last_seq: int = Field(description="The session log's last position.")
     notes: list[SessionNote] = Field(description="Notes after `ack`, oldest first.")
     checking: bool = Field(description="A watcher check is queued or running: another note may still come.")
 
@@ -131,16 +156,12 @@ class SessionEvent(BaseModel):
 class SessionEventsResponse(BaseModel):
     items: list[SessionEvent]
     last_seq: int = Field(description="The log's last position now: poll again with `after` set to it.")
-    status: str
     checking: bool
 
 
 class SessionSummary(BaseModel):
     session_id: str
     document_id: str
-    title: str | None = None
-    source: str | None = None
-    status: str
     watch: bool
     retain: str
     event_count: int

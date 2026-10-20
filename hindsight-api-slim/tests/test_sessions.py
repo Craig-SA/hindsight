@@ -11,16 +11,43 @@ import uuid
 import pytest
 
 from hindsight_api.engine.response_models import LLMCallTrace, MemoryFact, ReflectResult, TokenUsage
-from hindsight_api.engine.sessions.models import SessionAppendRequest, SessionEventIn, SessionOptions
+from hindsight_api.engine.sessions.models import SessionAppendRequest, SessionMessage, SessionOptions
 
 
 def _bank() -> str:
     return f"sess-{uuid.uuid4().hex[:10]}"
 
 
-def _req(*events: dict, ack: int | None = None, **session) -> SessionAppendRequest:
+def _req(*steps: dict, ack: int | None = None, **session) -> SessionAppendRequest:
+    """One step per dict, for brevity (`text`; `tool`+`call_id`+`input`; `kind: tool_result`;
+    `kind: state`; `kind: turn_end`), sent the way a client sends them: as OpenAI-style messages."""
+    messages: list[SessionMessage] = []
+    state, turn_end = None, False
+    for e in steps:
+        kind = e.get("kind", "message")
+        if kind == "message":
+            messages.append(SessionMessage(id=e["id"], role=e["role"], content=e["text"]))
+        elif kind == "tool_call":
+            call = {"id": e["call_id"], "function": {"name": e["tool"], "arguments": json.dumps(e["input"])}}
+            messages.append(SessionMessage(id=e["id"], role="assistant", tool_calls=[call]))
+        elif kind == "tool_result":
+            messages.append(
+                SessionMessage(
+                    id=e["id"],
+                    role="tool",
+                    tool_call_id=e["call_id"],
+                    content=e["text"],
+                    is_error=e.get("is_error", False),
+                )
+            )
+        elif kind == "state":
+            state = e["data"]
+        elif kind == "turn_end":
+            turn_end = True
     return SessionAppendRequest(
-        events=[SessionEventIn(**e) for e in events],
+        messages=messages,
+        state=state,
+        turn_end=turn_end,
         ack=ack,
         session=SessionOptions(**session) if session else None,
     )
@@ -52,7 +79,7 @@ async def test_append_is_ordered_and_a_retry_stores_nothing_twice(memory, reques
         _req({"id": "a", "role": "user", "text": "hi"}, {"id": "b", "role": "assistant", "text": "hello"}),
         request_context=request_context,
     )
-    assert (r.accepted, r.duplicates, r.last_seq) == (2, 0, 2)
+    assert r.notes == [] and not r.checking
     # The response was lost: the client sends the same events again, plus a new one.
     r = await s.append(
         bank,
@@ -65,7 +92,6 @@ async def test_append_is_ordered_and_a_retry_stores_nothing_twice(memory, reques
         ),
         request_context=request_context,
     )
-    assert (r.accepted, r.duplicates, r.last_seq) == (1, 3, 3)
     log = await s.events(bank, "s1", request_context=request_context)
     assert [(e.seq, e.event_id, e.source) for e in log.items] == [
         (1, "a", "client"),
@@ -112,7 +138,7 @@ async def test_a_note_is_logged_delivered_until_acked_and_never_repeated(memory,
     assert check["usage"]["input_tokens"] == 100 and check["llm_calls"][0]["scope"] == "decision_pick"
 
     r = await s.append(bank, "s1", _req(), request_context=request_context)
-    assert [n.seq for n in r.notes] == [3] and r.notes[0].trigger == "task"
+    assert [n.seq for n in r.notes] == [3] and r.notes[0].text.startswith("Before you change")
     r = await s.append(bank, "s1", _req(ack=3), request_context=request_context)
     assert r.notes == []
 
@@ -158,6 +184,29 @@ async def test_a_note_is_logged_delivered_until_acked_and_never_repeated(memory,
     assert summary.delivered_count == 1  # the client acknowledged the heads-up only
 
 
+async def test_the_log_records_when_a_note_first_goes_back_to_the_client(memory, request_context, monkeypatch):
+    monkeypatch.setattr(memory, "reflect_async", _reflect_stub([("Half cents round down.", [str(uuid.uuid4())])], []))
+    bank, s = _bank(), memory.sessions
+    await s.append(
+        bank,
+        "s1",
+        _req({"id": "1", "role": "user", "text": "Fix pay/rounding.py"}, watch=True, retain="off"),
+        request_context=request_context,
+    )
+    # The note (seq 3) goes back with the next append's events, then again on a poll until acked.
+    await s.append(
+        bank, "s1", _req({"id": "2", "role": "assistant", "text": "Looking."}), request_context=request_context
+    )
+    r = await s.append(bank, "s1", _req(), request_context=request_context)
+    assert [n.seq for n in r.notes] == [3]
+    log = (await s.events(bank, "s1", request_context=request_context)).items
+    handoffs = [e for e in log if e.kind == "handoff"]
+    # Logged once, at the first send, naming the client event whose reply carried it.
+    assert len(handoffs) == 1 and handoffs[0].source == "hindsight"
+    assert handoffs[0].payload == {"note_seq": 3, "with_seqs": [4]}
+    assert handoffs[0].seq == 5
+
+
 async def test_an_abstained_check_is_logged_silent(memory, request_context, monkeypatch):
     monkeypatch.setattr(memory, "reflect_async", _reflect_stub([("", [])], []))
     bank = _bank()
@@ -180,7 +229,7 @@ async def test_a_failed_check_is_logged_and_the_session_goes_on(memory, request_
     )
     log = (await memory.sessions.events(bank, "s1", request_context=request_context)).items
     assert log[-1].payload["outcome"] == "error" and "provider down" in log[-1].payload["error"]
-    assert r.accepted == 1
+    assert r.notes == [] and log[0].event_id == "1"
 
 
 async def test_a_turn_end_saves_the_turn_into_the_document_once(memory, request_context, monkeypatch):
@@ -254,7 +303,7 @@ async def test_a_save_that_died_after_submitting_resubmits_the_same_operation(me
     monkeypatch.setattr(memory, "submit_async_retain", submit_async_retain)
     bank, s = _bank(), memory.sessions
     await s.append(
-        bank, "s1", _req({"id": "1", "role": "user", "text": "hello"}, retain="close"), request_context=request_context
+        bank, "s1", _req({"id": "1", "role": "user", "text": "hello"}, retain="idle"), request_context=request_context
     )
     with pytest.raises(RuntimeError):
         await s.run_save({"bank_id": bank, "session_id": "s1"})
@@ -268,7 +317,14 @@ async def test_a_save_that_died_after_submitting_resubmits_the_same_operation(me
     assert len(submitted) == 3 and submitted[2] != submitted[0]
 
 
-async def test_close_saves_and_retain_off_never_does(memory, request_context, monkeypatch):
+async def test_an_idle_session_saves_what_is_unsaved_and_retain_off_never_does(memory, request_context, monkeypatch):
+    """There is no close: a session that went quiet (finished, or its client died mid-turn) is idle,
+    and its turns not saved yet are saved then. `idle` saves only then; `off` never."""
+    from types import SimpleNamespace
+
+    from hindsight_api.engine.sessions import service
+    from hindsight_api.worker.exceptions import DeferOperation
+
     submitted: list[dict] = []
 
     async def submit_async_retain(bank_id, contents, **kwargs):
@@ -278,34 +334,43 @@ async def test_close_saves_and_retain_off_never_does(memory, request_context, mo
     monkeypatch.setattr(memory, "submit_async_retain", submit_async_retain)
     bank, s = _bank(), memory.sessions
     await s.append(
-        bank, "a", _req({"id": "1", "role": "user", "text": "hello"}, retain="close"), request_context=request_context
+        bank, "a", _req({"id": "1", "role": "user", "text": "hello"}, retain="idle"), request_context=request_context
     )
     await s.append(
         bank, "a", _req({"id": "2", "role": "assistant", "kind": "turn_end"}), request_context=request_context
     )
-    assert submitted == []  # `close`: a turn end does not save
-    closed = await s.close(bank, "a", request_context=request_context)
-    assert closed.status == "closed" and len(submitted) == 1
+    assert submitted == []  # `idle`: a turn end does not save
+    # On a real queue the idle timer goes back for later: the session only just moved.
+    monkeypatch.setattr(memory._task_backend, "can_defer", True)
+    with pytest.raises(DeferOperation) as deferred:
+        await s.run_idle({"bank_id": bank, "session_id": "a"})
+    summary = await s.get(bank, "a", request_context=request_context)
+    wait = (deferred.value.exec_date - summary.last_event_at).total_seconds()
+    assert wait == 600 and submitted == []  # the default idle window, from the last event
+    # Once idle, it queues the save (it runs at once on this test backend).
+    monkeypatch.setattr(service, "get_config", lambda: SimpleNamespace(session_idle_ms=0))
+    await s.run_idle({"bank_id": bank, "session_id": "a"})
+    assert len(submitted) == 1 and "hello" in submitted[0]["content"]
+    # Saved: a later timer finds nothing to do.
+    await s.run_idle({"bank_id": bank, "session_id": "a"})
+    assert len(submitted) == 1
     await s.append(
         bank, "b", _req({"id": "1", "role": "user", "text": "hello"}, retain="off"), request_context=request_context
     )
-    await s.close(bank, "b", request_context=request_context)
+    await s.append(
+        bank, "b", _req({"id": "2", "role": "assistant", "kind": "turn_end"}), request_context=request_context
+    )
     assert len(submitted) == 1
-    # A later append opens a closed session again.
-    await s.append(bank, "a", _req({"id": "3", "role": "user", "text": "back"}), request_context=request_context)
-    assert (await s.get(bank, "a", request_context=request_context)).status == "open"
 
 
 async def test_sessions_are_bank_scoped_and_listed_newest_first(memory, request_context):
     a, b, s = _bank(), _bank(), memory.sessions
-    await s.append(
-        a, "same", _req({"id": "1", "role": "user", "text": "in a"}, title="First"), request_context=request_context
-    )
+    await s.append(a, "same", _req({"id": "1", "role": "user", "text": "in a"}), request_context=request_context)
     await s.append(a, "other", _req({"id": "1", "role": "user", "text": "in a"}), request_context=request_context)
     await s.append(b, "same", _req({"id": "1", "role": "user", "text": "in b"}), request_context=request_context)
     listing = await s.list(a, request_context=request_context)
     assert listing.total == 2 and [x.session_id for x in listing.items] == ["other", "same"]
-    assert [x.session_id for x in (await s.list(a, q="FIRST", request_context=request_context)).items] == ["same"]
+    assert [x.session_id for x in (await s.list(a, q="SAM", request_context=request_context)).items] == ["same"]
     in_b = (await s.events(b, "same", request_context=request_context)).items
     assert [e.payload["text"] for e in in_b] == ["in b"]
 
@@ -314,17 +379,16 @@ async def test_http_routes(api_client):
     bank = _bank()
     r = await api_client.post(
         f"/v1/default/banks/{bank}/sessions/s1/events",
-        json={"events": [{"id": "1", "role": "user", "text": "hi"}], "session": {"title": "T"}},
+        json={"messages": [{"id": "1", "role": "user", "content": "hi"}], "session": {"metadata": {"harness": "cli"}}},
     )
-    assert r.status_code == 200 and r.json()["accepted"] == 1
+    assert r.status_code == 200 and r.json() == {"notes": [], "checking": False}
     r = await api_client.get(f"/v1/default/banks/{bank}/sessions/s1/events", params={"after": 0})
     assert r.status_code == 200 and r.json()["items"][0]["payload"]["text"] == "hi"
     assert (await api_client.get(f"/v1/default/banks/{bank}/sessions")).json()["total"] == 1
-    assert (await api_client.get(f"/v1/default/banks/{bank}/sessions/s1")).json()["title"] == "T"
-    assert (await api_client.post(f"/v1/default/banks/{bank}/sessions/s1/close")).json()["status"] == "closed"
+    assert (await api_client.get(f"/v1/default/banks/{bank}/sessions/s1")).json()["metadata"] == {"harness": "cli"}
     assert (await api_client.get(f"/v1/default/banks/{bank}/sessions/nope/events")).status_code == 404
     assert (await api_client.get(f"/v1/default/banks/{bank}/sessions/nope")).status_code == 404
-    bad = await api_client.post(f"/v1/default/banks/{bank}/sessions/s1/events", json={"events": [{"role": "user"}]})
+    bad = await api_client.post(f"/v1/default/banks/{bank}/sessions/s1/events", json={"messages": [{"role": "user"}]})
     assert bad.status_code == 422
 
 
@@ -398,21 +462,68 @@ async def test_every_session_endpoint_is_validated_and_a_tag_scoped_caller_is_re
     bank, base = _bank(), None
     base = f"/v1/default/banks/{bank}/sessions"
     assert (
-        await api_client.post(f"{base}/s1/events", json={"events": [{"id": "1", "role": "user", "text": "hi"}]})
+        await api_client.post(f"{base}/s1/events", json={"messages": [{"id": "1", "role": "user", "content": "hi"}]})
     ).status_code == 200
     assert (await api_client.get(f"{base}/s1/events")).status_code == 200
     assert (await api_client.get(base)).status_code == 200
     assert (await api_client.get(f"{base}/s1")).status_code == 200
-    assert (await api_client.post(f"{base}/s1/close")).status_code == 200
     assert seen == [
         "append_session_events",
         "list_session_events",
         "list_sessions",
         "get_session",
-        "close_session",
     ]
     # A caller confined to some tags would see the whole bank through the watcher's notes.
     validator.resolve_tag_scope = AsyncMock(return_value=[TagGroupLeaf(tags=["user:dan"], match="any_strict")])
-    refused = await api_client.post(f"{base}/s1/events", json={"events": [{"id": "2", "role": "user", "text": "x"}]})
+    refused = await api_client.post(
+        f"{base}/s1/events", json={"messages": [{"id": "2", "role": "user", "content": "x"}]}
+    )
     assert refused.status_code == 403 and "tag-scoped caller" in refused.json()["detail"]
     assert (await api_client.get(f"{base}/s1/events")).status_code == 403
+
+
+async def test_openai_style_messages_become_the_log_and_a_turn_end_is_stored_once(api_client):
+    """A client sends the messages it keeps as they are: content parts, tool calls with their arguments
+    as a JSON string, tool messages, extra keys it does not know about."""
+    bank = _bank()
+    url = f"/v1/default/banks/{bank}/sessions/s1/events"
+    body = {
+        "messages": [
+            {"id": "m1", "role": "user", "content": [{"type": "text", "text": "Fix the rounding"}], "name": "dan"},
+            {
+                "id": "m2",
+                "role": "assistant",
+                "content": "Looking at it.",
+                "tool_calls": [
+                    {
+                        "id": "c1",
+                        "type": "function",
+                        "function": {"name": "terminal", "arguments": '{"command": "ls"}'},
+                    },
+                    {"id": "c2", "type": "function", "function": {"name": "write_file", "arguments": "not json"}},
+                ],
+            },
+            {"id": "m3", "role": "tool", "tool_call_id": "c1", "content": "pay.py"},
+        ],
+        "state": {"diff": "+x"},
+        "turn_end": True,
+    }
+    r = await api_client.post(url, json=body)
+    assert r.status_code == 200
+    items = [e for e in (await api_client.get(url)).json()["items"] if e["source"] == "client"]
+    assert [(e["event_id"], e["kind"]) for e in items] == [
+        ("m1", "message"),
+        ("m2", "message"),
+        ("m2:c1", "tool_call"),
+        ("m2:c2", "tool_call"),
+        ("m3", "tool_result"),
+        ("state:" + items[5]["event_id"][6:], "state"),
+        ("turn_end:m3", "turn_end"),
+    ]
+    assert items[0]["payload"] == {"role": "user", "text": "Fix the rounding"}
+    assert items[2]["payload"]["input"] == {"command": "ls"}
+    assert items[3]["payload"]["input"] == {"arguments": "not json"}
+    # Retried whole, then a turn end alone: nothing new happened, so nothing is stored.
+    await api_client.post(url, json=body)
+    await api_client.post(url, json={"turn_end": True})
+    assert len([e for e in (await api_client.get(url)).json()["items"] if e["source"] == "client"]) == 7
