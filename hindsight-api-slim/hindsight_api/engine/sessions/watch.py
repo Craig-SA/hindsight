@@ -101,6 +101,9 @@ class WatchState(BaseModel):
     sent: list[str] = Field(default_factory=list)
     evidence_sent: list[str] = Field(default_factory=list)
     judged: list[str] = Field(default_factory=list)
+    # The notes (by seq) the agent told the user it used, and the ones it said it did not need.
+    credited: list[int] = Field(default_factory=list)
+    dismissed: list[int] = Field(default_factory=list)
 
 
 class Step(BaseModel):

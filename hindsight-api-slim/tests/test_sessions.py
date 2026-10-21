@@ -103,17 +103,43 @@ async def test_append_is_ordered_and_a_retry_stores_nothing_twice(memory, reques
     assert summary.event_count == 3 and summary.document_id == "session:s1" and not summary.live
 
 
-async def test_the_agent_telling_the_user_about_notes_is_counted_once(memory, request_context):
-    """A note the agent used and one it did not need, as the clients ask it to word them; a user
-    quoting the line or a retried append does not count again."""
+async def test_the_agent_telling_the_user_about_notes_is_counted_once(memory, request_context, monkeypatch):
+    """The agent names each note by number: one it used, one it did not need. Each note counts once
+    however often it is named or the turn is resent; a number that is not a note of this session,
+    and a user quoting the line, do not count."""
     bank = _bank()
     s = memory.sessions
+    calls: list[dict] = []
+    answers = [
+        ("Before you change units.py: K is 1024.", [str(uuid.uuid4())]),
+        ("Email is never masked.", [str(uuid.uuid4())]),
+    ]
+    monkeypatch.setattr(memory, "reflect_async", _reflect_stub(answers, calls))
+    ask = {"id": "u", "role": "user", "text": "Fix units.py"}
+    await s.append(bank, "s1", _req(ask, live=True, retain="off"), request_context=request_context)
+    edit = (
+        {
+            "id": "e",
+            "role": "assistant",
+            "kind": "tool_call",
+            "tool": "Edit",
+            "call_id": "e",
+            "input": {"file_path": "p"},
+        },
+        {"id": "r", "role": "tool", "kind": "tool_result", "call_id": "e", "text": "ok"},
+        {"id": "d", "role": "system", "kind": "state", "data": {"diff": "+++ b/p\n+mask(email)"}},
+    )
+    await s.append(bank, "s1", _req(*edit), request_context=request_context)
+    notes = (await s.events(bank, "s1", request_context=request_context)).items
+    used, unneeded = [e.seq for e in notes if e.kind == "note"][:2]
     reply = (
-        "> 🧠 **From Hindsight memory (live session)** — email is never masked, so I kept it.\n"
-        "> 🧠 **Hindsight note (live session)** — the card rule; not needed here: no card field."
+        f"> 🧠 **From Hindsight memory (live session #{used})** — K is 1024, so I kept it.\n"
+        f"> 🧠 **Hindsight note (live session #{unneeded})** — email masking; not needed here.\n"
+        f"Again: **From Hindsight memory (live session #{used})** — and #999 is not a note: "
+        "**From Hindsight memory (live session #999)**"
     )
     steps = (
-        {"id": "u", "role": "user", "text": "why the **From Hindsight memory (live session)** line?"},
+        {"id": "q", "role": "user", "text": f"why **From Hindsight memory (live session #{unneeded})**?"},
         {"id": "a", "role": "assistant", "text": reply},
     )
     await s.append(bank, "s1", _req(*steps), request_context=request_context)

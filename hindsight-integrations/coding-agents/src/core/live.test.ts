@@ -10,6 +10,8 @@ import {
   LIVE_DECLARATION,
   renderNote,
   sourceDiff,
+  noteCredit,
+  noteDismiss,
 } from "./live";
 
 const where = (document_id: string, mentioned_at?: string) =>
@@ -24,17 +26,17 @@ describe("the note's source", () => {
         source: { document_id: "git:abc", quote: "memory as 1024" },
       })
     ).toBe(
-      `${NOTE_LEAD} K is 1024. Source: git show abc — "memory as 1024". Tell the user about it: "${NOTE_CREDIT} …" if you use it, else "${NOTE_DISMISS} …; not needed here: …"`
+      `${NOTE_LEAD.replace("Note", "Note #1")} K is 1024. Source: git show abc — "memory as 1024". Tell the user about it: "${noteCredit(1)} …" if you use it, else "${noteDismiss(1)} …; not needed here: …"`
     );
     expect(renderNote({ seq: 1, text: "K is 1024." })).toBe(
-      `${NOTE_LEAD} K is 1024. Source: project memory. Tell the user about it: "${NOTE_CREDIT} …" if you use it, else "${NOTE_DISMISS} …; not needed here: …"`
+      `${NOTE_LEAD.replace("Note", "Note #1")} K is 1024. Source: project memory. Tell the user about it: "${noteCredit(1)} …" if you use it, else "${noteDismiss(1)} …; not needed here: …"`
     );
   });
 
   it("asks the agent to mention every note: credit one it used, name one it did not need", () => {
     // The server counts these exact lines (engine/sessions/service.py CREDIT_MARK / DISMISS_MARK).
-    expect(NOTE_CREDIT).toContain("From Hindsight memory (live session)");
-    expect(NOTE_DISMISS).toContain("Hindsight note (live session)");
+    expect(noteCredit(8)).toContain("From Hindsight memory (live session #8)");
+    expect(noteDismiss(8)).toContain("Hindsight note (live session #8)");
     expect(LIVE_DECLARATION).toContain(NOTE_CREDIT);
     expect(LIVE_DECLARATION).toContain(NOTE_DISMISS);
   });

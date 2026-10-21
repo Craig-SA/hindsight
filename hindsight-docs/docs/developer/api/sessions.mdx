@@ -139,10 +139,11 @@ The rules for notes: Hindsight waits for the session to settle before checking (
 right after it are one check), never says the same memory twice, judges the same situation once,
 and sends at most three notes per session.
 
-Ask your agent to tell the user about every note, in its reply, with one of two lines: a note it used
-starts with `🧠 **From Hindsight memory (live session)**`, and a note it did not need starts with
-`🧠 **Hindsight note (live session)**`. Hindsight counts both in the agent's messages as they stream
-in: the session's `credit_count` (notes used) and `dismissed_count` (notes shown but not needed).
+Ask your agent to tell the user about every note, in its reply, with one of two lines naming the note
+by its `seq`: a note it used starts with `🧠 **From Hindsight memory (live session #12)**`, and a note
+it did not need with `🧠 **Hindsight note (live session #12)**`. Hindsight reads both in the agent's
+messages as they stream in and counts each note of the session once: the session's `credit_count`
+(notes used) and `dismissed_count` (notes shown but not needed).
 
 ## Saving into memory
 

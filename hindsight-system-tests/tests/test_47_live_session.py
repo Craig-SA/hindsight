@@ -24,7 +24,6 @@ pytestmark = pytest.mark.asyncio
 
 DECISION = "parse_quantity reads memory suffixes as binary: K is 1024, never 1000"
 NOTE = "Memory suffixes are binary: K is 1024, not 1000."
-REPLY = "> 🧠 **From Hindsight memory (live session)** — K is binary.\nReading parse_quantity as binary."
 REQUEST = "Fix parse_quantity so pods get the memory their config asks for."
 
 
@@ -77,6 +76,9 @@ async def test_a_watched_session_hears_the_decision_once_and_its_turn_is_saved(c
     r = await client.sessions.append_session_events(decided_bank, session, SessionAppendRequest(ack=note.seq))
     assert r.notes == []
 
+    # The agent tells the user it used the note, naming it by number.
+    reply = f"> 🧠 **From Hindsight memory (live session #{note.seq})** — K is binary.\nReading parse_quantity as binary."
+
     # The same request again is not judged twice; the end of the turn saves the conversation.
     await client.sessions.append_session_events(
         decided_bank,
@@ -84,7 +86,7 @@ async def test_a_watched_session_hears_the_decision_once_and_its_turn_is_saved(c
         SessionAppendRequest(
             messages=[
                 SessionMessage.from_dict({"id": "1", "role": "user", "content": REQUEST}),  # a retry: stored once
-                SessionMessage.from_dict({"id": "2", "role": "assistant", "content": REPLY}),
+                SessionMessage.from_dict({"id": "2", "role": "assistant", "content": reply}),
             ],
             turn_end=True,
             ack=note.seq,
@@ -99,7 +101,7 @@ async def test_a_watched_session_hears_the_decision_once_and_its_turn_is_saved(c
     assert [(t["role"], t["content"]) for t in lines] == [
         ("system", f"REF-ID: session:{session}"),
         ("user", REQUEST),
-        ("assistant", REPLY),
+        ("assistant", reply),
     ]
     summary = await client.sessions.get_session(decided_bank, session)
     assert summary.note_count == 1 and summary.acked_seq == note.seq

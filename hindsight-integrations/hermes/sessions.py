@@ -118,10 +118,10 @@ class SessionLink:
         return notes
 
 
-NOTE_CREDIT = "> 🧠 **From Hindsight memory (live session)** —"
+NOTE_CREDIT = "> 🧠 **From Hindsight memory (live session #<note number>)** —"
 # Every note is mentioned, so the user sees Hindsight at work even when it had nothing to add; the
 # server counts both lines (the session's credit_count and dismissed_count).
-NOTE_DISMISS = "> 🧠 **Hindsight note (live session)** —"
+NOTE_DISMISS = "> 🧠 **Hindsight note (live session #<note number>)** —"
 
 
 def notes_block(notes: list[SessionNote]) -> str:
@@ -130,13 +130,13 @@ def notes_block(notes: list[SessionNote]) -> str:
         "# Hindsight live session",
         "Notes from this project's memory about what you are doing now. Check the quoted source before acting on one.",
         # The same credit the plugin's recall asks for, so the user sees memory at work.
-        "Tell the user about every note, one line each: one that shaped what you do, starting with "
+        "Tell the user about every note, one line each, naming it by its number: one that shaped what you do, starting with "
         f'"{NOTE_CREDIT} <what it told you>"; one you did not need, starting with '
         f'"{NOTE_DISMISS} <what it said>; not needed here: <why>". '
         "Never use the first line for a note you did not use.",
     ]
     for n in notes:
-        lines.append(f"\n- {n.text}")
+        lines.append(f"\n- Note #{n.seq}: {n.text}")
         if n.quote:
             lines.append(f'  Source ({n.document_id}): "{n.quote}"')
     return "\n".join(lines)

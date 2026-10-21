@@ -6895,13 +6895,13 @@ export type SessionSummary = {
   /**
    * Credit Count
    *
-   * Times the agent told the user a note shaped its work: assistant lines carrying `From Hindsight memory (live session)`.
+   * Notes the agent told the user it used, each counted once: assistant lines carrying `From Hindsight memory (live session #<note seq>)`.
    */
   credit_count: number;
   /**
    * Dismissed Count
    *
-   * Times the agent told the user about a note it did not need: assistant lines carrying `Hindsight note (live session)`.
+   * Notes the agent told the user it did not need, each counted once: assistant lines carrying `Hindsight note (live session #<note seq>)`.
    */
   dismissed_count: number;
   /**

@@ -31,6 +31,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -74,11 +75,11 @@ MAX_ROUNDS = 4
 # longer reports itself as checking. The operation itself is retried by the worker poller.
 CHECKING_STALE_S = 300
 REFLECT_MAX_TOKENS = 600
-# How the agent tells the user about a note (the clients ask for these exact lines): one it used,
-# and one it did not need. Counted from the assistant messages the client streams in, so every
-# client that asks for the same lines is counted the same way.
-CREDIT_MARK = "From Hindsight memory (live session)"
-DISMISS_MARK = "Hindsight note (live session)"
+# How the agent tells the user about a note (the clients ask for these exact lines, naming the note
+# by its seq): one it used, and one it did not need. Read from the assistant messages the client
+# streams in, so every client that asks for the same lines is counted the same way.
+CREDIT_RE = re.compile(r"From Hindsight memory \(live session #(\d+)\)")
+DISMISS_RE = re.compile(r"Hindsight note \(live session #(\d+)\)")
 # How the saved conversation reads to extraction when the client does not say: who is speaking.
 DEFAULT_SAVE_CONTEXT = (
     "conversation between a user and an assistant: user turns are the user's words and decisions, "
@@ -340,7 +341,8 @@ class SessionService:
                 seq = int(row["next_seq"])
                 rows: list[tuple[int, str, str, str]] = []
                 seen: set[str] = set()
-                credits = dismissed = 0
+                cited: set[int] = set()
+                said_unneeded: set[int] = set()
                 for event in incoming:
                     if event.id in known or event.id in seen:
                         continue
@@ -351,11 +353,31 @@ class SessionService:
                         if step is not None:
                             W.read_step(state, step, seq)
                     if event.kind == "message" and payload["role"] == "assistant":
-                        credits += payload["text"].count(CREDIT_MARK)
-                        dismissed += payload["text"].count(DISMISS_MARK)
+                        cited.update(int(n) for n in CREDIT_RE.findall(payload["text"]))
+                        said_unneeded.update(int(n) for n in DISMISS_RE.findall(payload["text"]))
                     rows.append((seq, event.id, event.kind, json.dumps(payload)))
                     seq += 1
                 turn_ended = any(r[2] == "turn_end" for r in rows)
+                credits = dismissed = 0
+                if cited or said_unneeded:
+                    # Only this session's notes count, each once however often the agent names it.
+                    notes_here = {
+                        int(r["seq"])
+                        for r in await conn.fetch(
+                            f"""
+                            SELECT seq FROM {fq_table("session_events")}
+                            WHERE bank_id = $1 AND session_id = $2 AND kind = 'note' AND seq = ANY($3)
+                            """,
+                            bank_id,
+                            session_id,
+                            list(cited | said_unneeded),
+                        )
+                    }
+                    new_credits = sorted((cited & notes_here) - set(state.credited))
+                    new_dismissed = sorted((said_unneeded & notes_here) - set(state.dismissed))
+                    state.credited += new_credits
+                    state.dismissed += new_dismissed
+                    credits, dismissed = len(new_credits), len(new_dismissed)
                 if rows:
                     await conn.bulk_insert_from_arrays(
                         fq_table("session_events"),

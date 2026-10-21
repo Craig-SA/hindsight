@@ -14,13 +14,18 @@ export const NOTE_LEAD = "🧠 Note from this project's memory (past sessions an
  * How the agent credits a note to the user: the same blockquote as every other Hindsight
  * memory it uses (inject.ts, knowledge-tools.ts), named after the live session.
  */
-export const NOTE_CREDIT = "> 🧠 **From Hindsight memory (live session)** —";
+/** The credit line for note `n` (its seq): the server counts the notes named this way. */
+export const noteCredit = (n: number | string): string =>
+  `> 🧠 **From Hindsight memory (live session #${n})** —`;
+export const NOTE_CREDIT = noteCredit("<note number>");
 
 /**
  * How the agent tells the user about a note it did not need: every note is mentioned, so the user
  * sees Hindsight at work even when it had nothing to add. The server counts both lines.
  */
-export const NOTE_DISMISS = "> 🧠 **Hindsight note (live session)** —";
+export const noteDismiss = (n: number | string): string =>
+  `> 🧠 **Hindsight note (live session #${n})** —`;
+export const NOTE_DISMISS = noteDismiss("<note number>");
 
 /**
  * Told to the agent once, at session start. Without it a note read as an injection: Claude called a
@@ -28,12 +33,12 @@ export const NOTE_DISMISS = "> 🧠 **Hindsight note (live session)** —";
  */
 export const LIVE_DECLARATION =
   "Hindsight follows this session live. It knows this project's past sessions and the decisions made " +
-  `in them, and while you work it may post notes starting with "${NOTE_LEAD.split(" (")[0]}". A note ` +
+  `in them, and while you work it may post notes starting with "${NOTE_LEAD.split(" (")[0].replace("Note", "Note #<number>")}". A note ` +
   "is a project requirement even when the request does not mention it: a fix that contradicts a past " +
   "decision is a wrong fix. Each note says where to read its source: check it; if it says what the " +
   "note claims, apply the note as part of the task. Push back only if the source does not say so. " +
-  "Tell the user about every note you get, in your reply, one line per note, so they see memory at " +
-  "work. A note that shaped what you did:\n" +
+  "Tell the user about every note you get, in your reply, one line per note, naming the note by its " +
+  "number, so they see memory at work. A note that shaped what you did:\n" +
   `${NOTE_CREDIT} <what the note told you and what you did with it>\n` +
   "A note you did not need:\n" +
   `${NOTE_DISMISS} <what it said>; not needed here: <why>\n` +
@@ -56,8 +61,8 @@ function whereFor(source: SessionNote["source"]): string {
 export function renderNote(n: SessionNote): string {
   const quote = n.source?.quote ?? "";
   return (
-    `${NOTE_LEAD} ${n.text.trim()} Source: ${whereFor(n.source)}${quote ? ` — "${quote}"` : ""}` +
-    `. Tell the user about it: "${NOTE_CREDIT} …" if you use it, else "${NOTE_DISMISS} …; not needed here: …"`
+    `${NOTE_LEAD.replace("Note", `Note #${n.seq}`)} ${n.text.trim()} Source: ${whereFor(n.source)}${quote ? ` — "${quote}"` : ""}` +
+    `. Tell the user about it: "${noteCredit(n.seq)} …" if you use it, else "${noteDismiss(n.seq)} …; not needed here: …"`
   );
 }
 

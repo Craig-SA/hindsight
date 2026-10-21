@@ -91,8 +91,9 @@ def test_notes_are_injected_before_the_next_turn_and_acknowledged_once(provider,
     ]
     block = instance.prefetch("Fix the rounding")
     assert "Half cents round down." in block and 'Source (d): "q"' in block
-    assert "From Hindsight memory (live session)" in block  # the agent is asked to credit it
-    assert "Hindsight note (live session)" in block  # and to mention it even when not needed
+    assert "From Hindsight memory (live session #<note number>)" in block  # the agent is asked to credit it
+    assert "Hindsight note (live session #<note number>)" in block  # and to mention it even when not needed
+    assert "Note #" in block  # each note carries the number to name it by
     # Delivered: the next request acknowledges it, and it is not injected again.
     assert instance.prefetch("next") == ""
     assert server.bodies[-1]["ack"] == 7
