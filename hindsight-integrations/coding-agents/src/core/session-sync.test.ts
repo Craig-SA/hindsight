@@ -178,6 +178,23 @@ describe("syncSession", () => {
     expect(appends.map((a) => a.session)).toEqual([{ live: true }, undefined, undefined]);
   });
 
+  it("opens the session again in a new bank when it moves repo, without resending the transcript", async () => {
+    const s = session();
+    const { client, appends } = server();
+    const options = vi.fn(() => ({ live: true }));
+    appendFileSync(s.transcript, prompt("u1", "Fix parse_quantity."));
+    await syncSession({ ...base(s, client), options, bankId: "coding-agent::a" });
+    appendFileSync(s.transcript, edit("u2", "t1"));
+    await syncSession({ ...base(s, client), options, bankId: "coding-agent::b" });
+    await syncSession({ ...base(s, client), options, bankId: "coding-agent::b" });
+    expect(appends.map((a) => a.session)).toEqual([{ live: true }, { live: true }, undefined]);
+    expect(appends.map((a) => a.messages.map((m) => m.id))).toEqual([
+      ["u1:0"],
+      ["u2a:0", "u2b:0"],
+      [],
+    ]);
+  });
+
   it("returns new notes rendered for the agent, and acknowledges them on the next append", async () => {
     const s = session();
     const note = {

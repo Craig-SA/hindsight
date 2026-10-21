@@ -52,6 +52,10 @@ export interface SessionSyncState {
   diffHash: string;
   /** Whether the session's options were sent (the first append creates the session). */
   opened: boolean;
+  /** The bank the session was opened in. A session that moves into another repo continues in that
+   *  repo's bank, where it is a new session: its options go again, or it starts there with live off
+   *  and no harness (seen in beta: sessions that cd'd between repos had 0 checks in the second). */
+  bank?: string;
   /** The server has no sessions: no live session, and the plugin writes the conversation back itself. */
   unsupported: boolean;
   /** Prompts the prompt hook already sent, by hash, so the transcript's copy is not sent again. */
@@ -181,6 +185,8 @@ export async function syncSession(args: {
   transcriptPath?: string;
   cwd: string;
   dir: string;
+  /** The bank this append goes to (the client's); a change reopens the session there. */
+  bankId?: string;
   client: SessionClient;
   eventsOf: EventsOf;
   /** How the session is set up; built only for the append that opens it. */
@@ -200,6 +206,12 @@ export async function syncSession(args: {
   try {
     const state = loadState(stateFile);
     if (state.unsupported) return { ...none, unsupported: true };
+    if (args.bankId && state.bank !== args.bankId) {
+      // Only what happens from here on goes to the new bank: the offset stays, so the transcript
+      // already sent is not sent (and saved, and paid for) a second time.
+      if (state.bank) state.opened = false;
+      state.bank = args.bankId;
+    }
     const read = readNew(args.transcriptPath, state, args.eventsOf);
     const messages = read.messages;
     if (args.prompt?.text.trim()) {

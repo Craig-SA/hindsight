@@ -98,6 +98,7 @@ export async function syncHarnessSession(
     transcriptPath: ev.transcript_path,
     cwd,
     dir: sessionStateDir(sessionId),
+    bankId,
     client: new HindsightClient({ apiUrl: cfg.apiUrl, apiToken: cfg.apiToken, bank: bankId }),
     eventsOf,
     options: () =>
