@@ -36,6 +36,8 @@ import {
   Clock,
   Send,
   SlidersHorizontal,
+  Braces,
+  CheckCheck,
 } from "lucide-react";
 import { client, type SessionEvent, type SessionSummary } from "@/lib/api";
 import { useBank } from "@/lib/bank-context";
@@ -175,7 +177,7 @@ export function SessionDetail({ sessionId, onBack }: { sessionId: string; onBack
   const [replay, setReplay] = useState<{ speed: number; playing: boolean; elapsed: number } | null>(
     null
   );
-  const [panel, setPanel] = useState<"filters" | "activity" | null>(null);
+  const [panel, setPanel] = useState<"filters" | "activity" | "raw" | null>(null);
   const [flashKey, setFlashKey] = useState<string | null>(null);
   const [hoverKey, setHoverKey] = useState<string | null>(null);
   const [newCount, setNewCount] = useState(0);
@@ -492,6 +494,13 @@ export function SessionDetail({ sessionId, onBack }: { sessionId: string; onBack
               if (key) flashRow(key);
             }}
           />
+        )}
+
+        {panel === "raw" && (
+          // The session's log as stored, oldest first: what the lanes are drawn from.
+          <pre className="mb-3 max-h-[60vh] overflow-auto rounded-lg border border-border/60 bg-muted/40 p-3 font-mono text-[11px] leading-relaxed">
+            {JSON.stringify(visibleEvents, null, 2)}
+          </pre>
         )}
 
         {pollError && (
@@ -929,8 +938,8 @@ function Toolbar({
   setPanel,
 }: {
   t: Translate;
-  panel: "filters" | "activity" | null;
-  setPanel: (p: "filters" | "activity" | null) => void;
+  panel: "filters" | "activity" | "raw" | null;
+  setPanel: (p: "filters" | "activity" | "raw" | null) => void;
   filters: RowFilters;
   setFilters: React.Dispatch<React.SetStateAction<RowFilters>>;
   replay: { speed: number; playing: boolean; elapsed: number } | null;
@@ -944,7 +953,7 @@ function Toolbar({
 }) {
   const set = (patch: Partial<RowFilters>) => setFilters((f) => ({ ...f, ...patch }));
   const filtering = !!filters.query || !filters.tools || !filters.silent || filters.hindsightOnly;
-  const toggle = (p: "filters" | "activity") => setPanel(panel === p ? null : p);
+  const toggle = (p: "filters" | "activity" | "raw") => setPanel(panel === p ? null : p);
   const filterControls = (
     <div className="mt-2 flex flex-wrap items-center gap-2 animate-soft-fade-in">
       <div className="relative w-full sm:w-56">
@@ -985,6 +994,10 @@ function Toolbar({
         <ToggleChip pressed={panel === "activity"} onClick={() => toggle("activity")}>
           <Activity className="h-3.5 w-3.5" />
           {t("activity")}
+        </ToggleChip>
+        <ToggleChip pressed={panel === "raw"} onClick={() => toggle("raw")}>
+          <Braces className="h-3.5 w-3.5" />
+          {t("rawLog")}
         </ToggleChip>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -2187,6 +2200,17 @@ function NoteCard({
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
                   <Clock className="h-3 w-3" />
                   {t("pending")}
+                </span>
+              )}
+              {timeline.noteMentions.get(row.seq) === "used" && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                  <CheckCheck className="h-3 w-3" />
+                  {t("noteUsed")}
+                </span>
+              )}
+              {timeline.noteMentions.get(row.seq) === "unneeded" && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  {t("noteNotNeeded")}
                 </span>
               )}
               <Time iso={row.event.created_at} />

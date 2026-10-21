@@ -210,6 +210,27 @@ interface Timeline {
   /** Row key for any seq it contains (a tool row holds its call's and its result's seq). */
   rowKeyBySeq: Map<number, string>;
   eventBySeq: Map<number, SessionEvent>;
+  /** What the agent told the user about each note (by note seq); "used" wins over "unneeded". */
+  noteMentions: Map<number, NoteMention>;
+}
+
+export type NoteMention = "used" | "unneeded";
+
+// The lines the agent is asked to write about a note (the server counts the same ones:
+// hindsight_api/engine/sessions/service.py CREDIT_RE / DISMISS_RE).
+const USED_RE = /From Hindsight memory \(live session #(\d+)\)/g;
+const UNNEEDED_RE = /Hindsight note \(live session #(\d+)\)/g;
+
+/** The notes the agent's own messages name as used or not needed. */
+export function noteMentions(events: SessionEvent[]): Map<number, NoteMention> {
+  const out = new Map<number, NoteMention>();
+  for (const ev of events) {
+    const p = (ev.payload ?? {}) as Record<string, unknown>;
+    if (ev.kind !== "message" || p.role !== "assistant" || typeof p.text !== "string") continue;
+    for (const m of p.text.matchAll(UNNEEDED_RE)) if (!out.has(+m[1])) out.set(+m[1], "unneeded");
+    for (const m of p.text.matchAll(USED_RE)) out.set(+m[1], "used");
+  }
+  return out;
 }
 
 /**
@@ -325,7 +346,7 @@ export function buildTimeline(events: SessionEvent[]): Timeline {
       push({ kind: "other", key, seq: ev.seq, event: ev, checks: [] });
     }
   }
-  return { rows, rowKeyBySeq, eventBySeq };
+  return { rows, rowKeyBySeq, eventBySeq, noteMentions: noteMentions(events) };
 }
 
 /** Checks that found nothing to say (or never ran): kept quiet, hidden by the "silent checks" toggle. */

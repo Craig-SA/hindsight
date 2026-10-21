@@ -261,6 +261,17 @@ function SessionsList({ onOpenSession }: { onOpenSession: (id: string) => void }
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
+                    {s.note_count > 0 && s.credit_count + s.dismissed_count > 0 && (
+                      <span
+                        className="ml-1.5 text-[11px] text-muted-foreground"
+                        title={t("noteMentions", {
+                          used: s.credit_count,
+                          skipped: s.dismissed_count,
+                        })}
+                      >
+                        {t("usedCount", { count: s.credit_count })}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell
                     className="text-xs text-muted-foreground whitespace-nowrap"
