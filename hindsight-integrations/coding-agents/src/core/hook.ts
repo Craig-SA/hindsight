@@ -347,8 +347,10 @@ export async function buildHookOutput(args: {
   }
 
   // ── knowledge-page roster (ids + titles only): refreshed on the cadence ────────
+  // A live session has no memory tools (see mcp-server.ts): no roster or tool guide to refresh.
+  const live = isLive(cfg, harness);
   const cadence = cfg.pageRefreshEveryTurns;
-  const stale = !cached.pages || (cadence > 0 && turns - cached.pages.atTurn >= cadence);
+  const stale = !live && (!cached.pages || (cadence > 0 && turns - cached.pages.atTurn >= cadence));
   let pages = cached.pages?.list ?? [];
   if (stale) {
     const t0 = Date.now();
@@ -385,7 +387,7 @@ export async function buildHookOutput(args: {
   // hindsight_search_knowledge_pages when a question warrants it — an unprompted injection on
   // every turn (even a plain "yes") read as phantom research. The roster below keeps the tool
   // and the page names in front of the agent.
-  if (cadence > 0 && turns % cadence === 0) {
+  if (!live && cadence > 0 && turns % cadence === 0) {
     blocks.push(
       buildRosterRefresh(pages, {
         reflectOnNewGoals: cfg.autoInject !== "reflect",

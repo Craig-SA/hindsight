@@ -341,21 +341,25 @@ export async function buildSessionStartContext(args: {
     }
   }
 
+  // A live session has no memory tools (see mcp-server.ts), so no tool guide or page roster either:
+  // only the declaration, since the live session's notes are trusted only when the agent knows they
+  // are coming (see LIVE_DECLARATION).
+  let additionalContext = LIVE_DECLARATION;
   let pages: PageRef[] = [];
-  try {
-    pages = parsePageList(await client.listPages());
-  } catch {
-    if (client.knowledgePagesSupported === false) {
-      diag(harness, "knowledge_pages_unavailable", { bank: bankId });
+  if (!isLive(cfg, harness)) {
+    try {
+      pages = parsePageList(await client.listPages());
+    } catch {
+      if (client.knowledgePagesSupported === false) {
+        diag(harness, "knowledge_pages_unavailable", { bank: bankId });
+      }
+      /* fail-open preamble */
     }
-    /* fail-open preamble */
+    additionalContext = buildKnowledgePreamble(pages, {
+      reflectOnNewGoals: cfg.autoInject !== "reflect",
+      extra: cfg.toolGuideExtra,
+    });
   }
-  const preamble = buildKnowledgePreamble(pages, {
-    reflectOnNewGoals: cfg.autoInject !== "reflect",
-    extra: cfg.toolGuideExtra,
-  });
-  // The live session's notes are trusted only when the agent knows they are coming (see LIVE_DECLARATION).
-  const additionalContext = isLive(cfg, harness) ? `${preamble}\n\n${LIVE_DECLARATION}` : preamble;
   // An empty page roster is NOT an empty bank: a bank with memories and no pages still answers a
   // reflect (#5209), so only the confirmed-empty probe above defers it.
   const deferInitialReflect = bankEmpty;
