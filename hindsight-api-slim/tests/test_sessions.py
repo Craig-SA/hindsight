@@ -162,6 +162,39 @@ async def test_an_event_carrying_a_nul_is_stored_without_it(memory, request_cont
     assert [e.payload["text"] for e in log] == ["binary"]
 
 
+@pytest.mark.parametrize(
+    ("sources", "noted"),
+    [
+        (["session:s1"], False),  # only this session's own saved turns: the agent already has them
+        (["session:s1", "chat:past"], True),  # a real past decision restated in this session: kept
+    ],
+)
+async def test_a_note_built_only_from_this_session_is_not_sent(memory, request_context, monkeypatch, sources, noted):
+    mem = str(uuid.uuid4())
+    monkeypatch.setattr(
+        memory, "reflect_async", _reflect_stub([("Before you change bar.js: total points.", [mem])], [])
+    )
+    units = {mem: {"document_id": sources[0], "source_memory_ids": [f"src{i}" for i in range(len(sources))]}}
+    units.update({f"src{i}": {"document_id": d} for i, d in enumerate(sources)})
+
+    async def get_memory_unit(bank_id, memory_id, request_context):
+        return units.get(memory_id)
+
+    monkeypatch.setattr(memory, "get_memory_unit", get_memory_unit)
+    bank, s = _bank(), memory.sessions
+    await s.append(
+        bank,
+        "s1",
+        _req({"id": "1", "role": "user", "text": "Fix bar.js"}, live=True, retain="off"),
+        request_context=request_context,
+    )
+    log = (await s.events(bank, "s1", request_context=request_context)).items
+    check = next(e for e in log if e.kind == "check").payload
+    assert any(e.kind == "note" for e in log) is noted
+    assert check["outcome"] == ("note" if noted else "repeat")
+    assert (check.get("reason") == "this session") is (not noted)
+
+
 async def test_without_watch_no_check_runs(memory, request_context, monkeypatch):
     calls: list[dict] = []
     monkeypatch.setattr(memory, "reflect_async", _reflect_stub([("note", [])], calls))

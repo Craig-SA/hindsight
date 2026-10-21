@@ -744,6 +744,11 @@ class SessionService:
         ms = int((time.monotonic() - t0) * 1000)
         # Looked up before taking the lock, and only when there is a note to cite: a few reads.
         source = await self._source_of(bank_id, memory_ids, text, rc) if text and not error else None
+        # A note built only from this session's own saved turns tells the agent what is already in its
+        # context: in beta it came back as a "past decision" (the agent's own earlier change, then the
+        # user's new request) turn after turn, each time under a new memory id, and the agent dismissed
+        # every one. A memory with any source outside this session is a real past decision and stays.
+        own = bool(text) and not error and await self._from_this_session_only(bank_id, session_id, memory_ids, rc)
 
         backend = await self._engine._get_backend()
         async with acquire_with_retry(backend) as conn:
@@ -759,7 +764,7 @@ class SessionService:
                 if row is None:
                     return
                 state = W.WatchState.model_validate(conn.parse_json(row["watch_state"]) or {})
-                spoke = not error and W.accept_note(state, m, text, memory_ids)
+                spoke = not error and not own and W.accept_note(state, m, text, memory_ids)
                 outcome = "error" if error else "note" if spoke else "repeat" if text else "silent"
                 check_seq = await self._log(
                     conn,
@@ -779,6 +784,7 @@ class SessionService:
                         memory_ids=memory_ids,
                         usage=usage,
                         llm_calls=calls,
+                        **({"reason": "this session"} if own else {}),
                     ),
                 )
                 if spoke:
@@ -839,6 +845,38 @@ class SessionService:
             seq + 1,
         )
         return seq
+
+    async def _from_this_session_only(
+        self, bank_id: str, session_id: str, memory_ids: list[str], rc: RequestContext
+    ) -> bool:
+        """Whether every memory the note used comes only from this session's own document (each memory
+        and the memories it was built from). Unknown -> False: the note stands."""
+        if not memory_ids:
+            return False
+        try:
+            backend = await self._engine._get_backend()
+            async with acquire_with_retry(backend) as conn:
+                own = await conn.fetchval(
+                    f"SELECT document_id FROM {fq_table('sessions')} WHERE bank_id = $1 AND session_id = $2",
+                    bank_id,
+                    session_id,
+                )
+            if not own:
+                return False
+            for mid in memory_ids:
+                unit = await self._engine.get_memory_unit(bank_id, mid, request_context=rc)
+                if not unit:
+                    return False
+                docs = {unit.get("document_id")} if unit.get("document_id") else set()
+                for sid in unit.get("source_memory_ids") or []:
+                    src = await self._engine.get_memory_unit(bank_id, sid, request_context=rc)
+                    docs.add((src or {}).get("document_id"))
+                if docs != {own}:
+                    return False
+            return True
+        except Exception as e:  # unknown: the note stands
+            logger.warning(f"session own-source check failed for {bank_id}: {e}")
+            return False
 
     async def _source_of(
         self, bank_id: str, memory_ids: list[str], note: str, rc: RequestContext
