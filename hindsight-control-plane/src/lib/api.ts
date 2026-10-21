@@ -64,6 +64,10 @@ export interface SessionSummary {
   event_count: number;
   check_count: number;
   note_count: number;
+  /** Notes the agent told the user it used ("From Hindsight memory (live session)" lines). */
+  credit_count: number;
+  /** Notes the agent told the user it did not need ("Hindsight note (live session)" lines). */
+  dismissed_count: number;
   last_seq: number;
   /** Log position saved into the session's document so far. */
   saved_seq: number;

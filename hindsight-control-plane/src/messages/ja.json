@@ -2387,6 +2387,7 @@
     "liveOn": "オン",
     "liveOff": "オフ",
     "liveOnLong": "ライブセッション オン",
+    "noteMentions": "{used} 件使用 · {skipped} 件不要",
     "liveOffLong": "ライブセッション オフ",
     "statusLive": "ライブ",
     "statusIdle": "アイドル",

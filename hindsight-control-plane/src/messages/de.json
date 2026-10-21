@@ -2387,6 +2387,7 @@
     "liveOn": "An",
     "liveOff": "Aus",
     "liveOnLong": "Live-Sitzung an",
+    "noteMentions": "{used} genutzt · {skipped} nicht nötig",
     "liveOffLong": "Live-Sitzung aus",
     "statusLive": "Live",
     "statusIdle": "Inaktiv",

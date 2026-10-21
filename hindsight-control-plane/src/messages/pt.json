@@ -2387,6 +2387,7 @@
     "liveOn": "Ligada",
     "liveOff": "Desligada",
     "liveOnLong": "Sessão ao vivo ligada",
+    "noteMentions": "{used} usadas · {skipped} desnecessárias",
     "liveOffLong": "Sessão ao vivo desligada",
     "statusLive": "Ao vivo",
     "statusIdle": "Inativa",

@@ -2387,6 +2387,7 @@
     "liveOn": "켜짐",
     "liveOff": "꺼짐",
     "liveOnLong": "라이브 세션 켜짐",
+    "noteMentions": "{used}개 사용 · {skipped}개 불필요",
     "liveOffLong": "라이브 세션 꺼짐",
     "statusLive": "라이브",
     "statusIdle": "유휴",

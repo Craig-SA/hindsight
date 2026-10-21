@@ -690,7 +690,16 @@ function SessionHeader({
           <Stat
             label={t("statNotes")}
             value={String(session.note_count)}
-            hint={session.live ? t("liveOnLong") : t("liveOffLong")}
+            hint={
+              session.note_count > 0
+                ? t("noteMentions", {
+                    used: session.credit_count,
+                    skipped: session.dismissed_count,
+                  })
+                : session.live
+                  ? t("liveOnLong")
+                  : t("liveOffLong")
+            }
             accent={session.note_count > 0}
           />
           <div className="min-w-0 rounded-xl border border-border/60 bg-card px-3 py-2">

@@ -3,7 +3,14 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { NOTE_CREDIT, NOTE_LEAD, LIVE_DECLARATION, renderNote, sourceDiff } from "./live";
+import {
+  NOTE_CREDIT,
+  NOTE_DISMISS,
+  NOTE_LEAD,
+  LIVE_DECLARATION,
+  renderNote,
+  sourceDiff,
+} from "./live";
 
 const where = (document_id: string, mentioned_at?: string) =>
   renderNote({ seq: 1, text: "K.", source: { document_id, mentioned_at } }).split("Source: ")[1];
@@ -17,16 +24,19 @@ describe("the note's source", () => {
         source: { document_id: "git:abc", quote: "memory as 1024" },
       })
     ).toBe(
-      `${NOTE_LEAD} K is 1024. Source: git show abc — "memory as 1024". If you use it, credit it to the user: "${NOTE_CREDIT} …"`
+      `${NOTE_LEAD} K is 1024. Source: git show abc — "memory as 1024". Tell the user about it: "${NOTE_CREDIT} …" if you use it, else "${NOTE_DISMISS} …; not needed here: …"`
     );
     expect(renderNote({ seq: 1, text: "K is 1024." })).toBe(
-      `${NOTE_LEAD} K is 1024. Source: project memory. If you use it, credit it to the user: "${NOTE_CREDIT} …"`
+      `${NOTE_LEAD} K is 1024. Source: project memory. Tell the user about it: "${NOTE_CREDIT} …" if you use it, else "${NOTE_DISMISS} …; not needed here: …"`
     );
   });
 
-  it("asks the agent to credit a note it used, in the same words as all Hindsight memory", () => {
-    expect(NOTE_CREDIT).toContain("From Hindsight memory");
+  it("asks the agent to mention every note: credit one it used, name one it did not need", () => {
+    // The server counts these exact lines (engine/sessions/service.py CREDIT_MARK / DISMISS_MARK).
+    expect(NOTE_CREDIT).toContain("From Hindsight memory (live session)");
+    expect(NOTE_DISMISS).toContain("Hindsight note (live session)");
     expect(LIVE_DECLARATION).toContain(NOTE_CREDIT);
+    expect(LIVE_DECLARATION).toContain(NOTE_DISMISS);
   });
 
   it("names where the agent can read each kind of document", () => {

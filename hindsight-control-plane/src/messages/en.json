@@ -2387,6 +2387,7 @@
     "liveOn": "On",
     "liveOff": "Off",
     "liveOnLong": "Live session on",
+    "noteMentions": "{used} used · {skipped} not needed",
     "liveOffLong": "Live session off",
     "statusLive": "Live",
     "statusIdle": "Idle",

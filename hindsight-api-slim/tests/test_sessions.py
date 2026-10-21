@@ -103,6 +103,25 @@ async def test_append_is_ordered_and_a_retry_stores_nothing_twice(memory, reques
     assert summary.event_count == 3 and summary.document_id == "session:s1" and not summary.live
 
 
+async def test_the_agent_telling_the_user_about_notes_is_counted_once(memory, request_context):
+    """A note the agent used and one it did not need, as the clients ask it to word them; a user
+    quoting the line or a retried append does not count again."""
+    bank = _bank()
+    s = memory.sessions
+    reply = (
+        "> 🧠 **From Hindsight memory (live session)** — email is never masked, so I kept it.\n"
+        "> 🧠 **Hindsight note (live session)** — the card rule; not needed here: no card field."
+    )
+    steps = (
+        {"id": "u", "role": "user", "text": "why the **From Hindsight memory (live session)** line?"},
+        {"id": "a", "role": "assistant", "text": reply},
+    )
+    await s.append(bank, "s1", _req(*steps), request_context=request_context)
+    await s.append(bank, "s1", _req(*steps), request_context=request_context)
+    summary = await s.get(bank, "s1", request_context=request_context)
+    assert (summary.credit_count, summary.dismissed_count) == (1, 1)
+
+
 async def test_without_watch_no_check_runs(memory, request_context, monkeypatch):
     calls: list[dict] = []
     monkeypatch.setattr(memory, "reflect_async", _reflect_stub([("note", [])], calls))

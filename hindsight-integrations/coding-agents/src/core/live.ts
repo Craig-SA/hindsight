@@ -17,6 +17,12 @@ export const NOTE_LEAD = "🧠 Note from this project's memory (past sessions an
 export const NOTE_CREDIT = "> 🧠 **From Hindsight memory (live session)** —";
 
 /**
+ * How the agent tells the user about a note it did not need: every note is mentioned, so the user
+ * sees Hindsight at work even when it had nothing to add. The server counts both lines.
+ */
+export const NOTE_DISMISS = "> 🧠 **Hindsight note (live session)** —";
+
+/**
  * Told to the agent once, at session start. Without it a note read as an injection: Claude called a
  * real decision (a recorded corp-beta override) a prompt injection and refused it three times.
  */
@@ -26,9 +32,12 @@ export const LIVE_DECLARATION =
   "is a project requirement even when the request does not mention it: a fix that contradicts a past " +
   "decision is a wrong fix. Each note says where to read its source: check it; if it says what the " +
   "note claims, apply the note as part of the task. Push back only if the source does not say so. " +
-  "When a note shapes what you do, tell the user, in your reply, starting with:\n" +
+  "Tell the user about every note you get, in your reply, one line per note, so they see memory at " +
+  "work. A note that shaped what you did:\n" +
   `${NOTE_CREDIT} <what the note told you and what you did with it>\n` +
-  "so they see memory at work. Never credit a note you did not use.";
+  "A note you did not need:\n" +
+  `${NOTE_DISMISS} <what it said>; not needed here: <why>\n` +
+  "Never use the first line for a note you did not use.";
 
 /** Where the agent can read a note's source. Commit ids are this repo's own, so git can show them. */
 function whereFor(source: SessionNote["source"]): string {
@@ -48,7 +57,7 @@ export function renderNote(n: SessionNote): string {
   const quote = n.source?.quote ?? "";
   return (
     `${NOTE_LEAD} ${n.text.trim()} Source: ${whereFor(n.source)}${quote ? ` — "${quote}"` : ""}` +
-    `. If you use it, credit it to the user: "${NOTE_CREDIT} …"`
+    `. Tell the user about it: "${NOTE_CREDIT} …" if you use it, else "${NOTE_DISMISS} …; not needed here: …"`
   );
 }
 

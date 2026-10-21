@@ -2387,6 +2387,7 @@
     "liveOn": "開啟",
     "liveOff": "關閉",
     "liveOnLong": "即時會話開啟",
+    "noteMentions": "{used} 則採用 · {skipped} 則不需要",
     "liveOffLong": "即時會話關閉",
     "statusLive": "直播中",
     "statusIdle": "閒置",

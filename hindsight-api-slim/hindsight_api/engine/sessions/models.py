@@ -171,6 +171,14 @@ class SessionSummary(BaseModel):
     event_count: int
     check_count: int
     note_count: int
+    credit_count: int = Field(
+        description="Times the agent told the user a note shaped its work: assistant lines carrying "
+        "`From Hindsight memory (live session)`."
+    )
+    dismissed_count: int = Field(
+        description="Times the agent told the user about a note it did not need: assistant lines carrying "
+        "`Hindsight note (live session)`."
+    )
     last_seq: int
     saved_seq: int
     acked_seq: int

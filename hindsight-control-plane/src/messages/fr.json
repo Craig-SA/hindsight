@@ -2387,6 +2387,7 @@
     "liveOn": "Active",
     "liveOff": "Inactive",
     "liveOnLong": "Session en direct active",
+    "noteMentions": "{used} utilisées · {skipped} inutiles",
     "liveOffLong": "Session en direct inactive",
     "statusLive": "En direct",
     "statusIdle": "Inactive",

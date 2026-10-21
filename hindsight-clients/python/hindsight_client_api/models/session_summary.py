@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from typing import Optional, Set
 from typing_extensions import Self
@@ -34,6 +34,8 @@ class SessionSummary(BaseModel):
     event_count: StrictInt
     check_count: StrictInt
     note_count: StrictInt
+    credit_count: StrictInt = Field(description="Times the agent told the user a note shaped its work: assistant lines carrying `From Hindsight memory (live session)`.")
+    dismissed_count: StrictInt = Field(description="Times the agent told the user about a note it did not need: assistant lines carrying `Hindsight note (live session)`.")
     last_seq: StrictInt
     saved_seq: StrictInt
     acked_seq: StrictInt
@@ -41,7 +43,7 @@ class SessionSummary(BaseModel):
     created_at: datetime
     last_event_at: Optional[datetime] = None
     metadata: Optional[Dict[str, Any]] = None
-    __properties: ClassVar[List[str]] = ["session_id", "document_id", "live", "retain", "event_count", "check_count", "note_count", "last_seq", "saved_seq", "acked_seq", "checking", "created_at", "last_event_at", "metadata"]
+    __properties: ClassVar[List[str]] = ["session_id", "document_id", "live", "retain", "event_count", "check_count", "note_count", "credit_count", "dismissed_count", "last_seq", "saved_seq", "acked_seq", "checking", "created_at", "last_event_at", "metadata"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -106,6 +108,8 @@ class SessionSummary(BaseModel):
             "event_count": obj.get("event_count"),
             "check_count": obj.get("check_count"),
             "note_count": obj.get("note_count"),
+            "credit_count": obj.get("credit_count"),
+            "dismissed_count": obj.get("dismissed_count"),
             "last_seq": obj.get("last_seq"),
             "saved_seq": obj.get("saved_seq"),
             "acked_seq": obj.get("acked_seq"),

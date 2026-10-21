@@ -74,6 +74,11 @@ MAX_ROUNDS = 4
 # longer reports itself as checking. The operation itself is retried by the worker poller.
 CHECKING_STALE_S = 300
 REFLECT_MAX_TOKENS = 600
+# How the agent tells the user about a note (the clients ask for these exact lines): one it used,
+# and one it did not need. Counted from the assistant messages the client streams in, so every
+# client that asks for the same lines is counted the same way.
+CREDIT_MARK = "From Hindsight memory (live session)"
+DISMISS_MARK = "Hindsight note (live session)"
 # How the saved conversation reads to extraction when the client does not say: who is speaking.
 DEFAULT_SAVE_CONTEXT = (
     "conversation between a user and an assistant: user turns are the user's words and decisions, "
@@ -335,6 +340,7 @@ class SessionService:
                 seq = int(row["next_seq"])
                 rows: list[tuple[int, str, str, str]] = []
                 seen: set[str] = set()
+                credits = dismissed = 0
                 for event in incoming:
                     if event.id in known or event.id in seen:
                         continue
@@ -344,6 +350,9 @@ class SessionService:
                         step = W.step_of(event.kind, payload["role"], payload)
                         if step is not None:
                             W.read_step(state, step, seq)
+                    if event.kind == "message" and payload["role"] == "assistant":
+                        credits += payload["text"].count(CREDIT_MARK)
+                        dismissed += payload["text"].count(DISMISS_MARK)
                     rows.append((seq, event.id, event.kind, json.dumps(payload)))
                     seq += 1
                 turn_ended = any(r[2] == "turn_end" for r in rows)
@@ -378,6 +387,7 @@ class SessionService:
                         f"""
                         UPDATE {fq_table("sessions")}
                         SET next_seq = $3, event_count = event_count + $4, acked_seq = $5,
+                            credit_count = credit_count + $11, dismissed_count = dismissed_count + $12,
                             watch_state = $6::jsonb, settings = $7::jsonb, metadata = $8::jsonb,
                             last_event_at = CASE WHEN $9 > 0 THEN now() ELSE last_event_at END,
                             pending_since = CASE WHEN $10 = 1 THEN COALESCE(pending_since, now()) ELSE NULL END,
@@ -394,6 +404,8 @@ class SessionService:
                         json.dumps(metadata),
                         len(rows),
                         1 if state.pending is not None else 0,
+                        credits,
+                        dismissed,
                     )
                 notes = await self._notes_after(
                     conn, bank_id, session_id, request.ack if request.ack is not None else acked
@@ -1048,6 +1060,8 @@ class SessionService:
             event_count=int(r["event_count"]),
             check_count=int(r["check_count"]),
             note_count=int(r["note_count"]),
+            credit_count=int(r["credit_count"]),
+            dismissed_count=int(r["dismissed_count"]),
             last_seq=int(r["next_seq"]) - 1,
             saved_seq=int(r["saved_seq"]),
             acked_seq=int(r["acked_seq"]),
@@ -1061,7 +1075,8 @@ class SessionService:
     def _summary_columns() -> str:
         return (
             "s.session_id, s.document_id, s.settings, s.metadata, s.watch_state, "
-            "s.next_seq, s.saved_seq, s.acked_seq, s.event_count, s.check_count, s.note_count, s.checking_since, "
+            "s.next_seq, s.saved_seq, s.acked_seq, s.event_count, s.check_count, s.note_count, "
+            "s.credit_count, s.dismissed_count, s.checking_since, "
             "s.created_at, s.last_event_at"
         )
 

@@ -13546,40 +13546,44 @@ components:
       title: SessionEventsResponse
     SessionListResponse:
       example:
-        total: 7
-        offset: 3
-        limit: 9
+        total: 3
+        offset: 4
+        limit: 2
         items:
         - check_count: 6
           checking: true
           metadata:
             key: ""
           event_count: 0
+          dismissed_count: 5
           retain: retain
           session_id: session_id
           created_at: 2000-01-23T04:56:07.000+00:00
           document_id: document_id
-          acked_seq: 2
-          saved_seq: 5
+          acked_seq: 9
+          saved_seq: 7
           last_event_at: 2000-01-23T04:56:07.000+00:00
+          credit_count: 5
           live: true
           note_count: 1
-          last_seq: 5
+          last_seq: 2
         - check_count: 6
           checking: true
           metadata:
             key: ""
           event_count: 0
+          dismissed_count: 5
           retain: retain
           session_id: session_id
           created_at: 2000-01-23T04:56:07.000+00:00
           document_id: document_id
-          acked_seq: 2
-          saved_seq: 5
+          acked_seq: 9
+          saved_seq: 7
           last_event_at: 2000-01-23T04:56:07.000+00:00
+          credit_count: 5
           live: true
           note_count: 1
-          last_seq: 5
+          last_seq: 2
       properties:
         items:
           items:
@@ -13774,16 +13778,18 @@ components:
         metadata:
           key: ""
         event_count: 0
+        dismissed_count: 5
         retain: retain
         session_id: session_id
         created_at: 2000-01-23T04:56:07.000+00:00
         document_id: document_id
-        acked_seq: 2
-        saved_seq: 5
+        acked_seq: 9
+        saved_seq: 7
         last_event_at: 2000-01-23T04:56:07.000+00:00
+        credit_count: 5
         live: true
         note_count: 1
-        last_seq: 5
+        last_seq: 2
       properties:
         session_id:
           title: Session Id
@@ -13805,6 +13811,16 @@ components:
           type: integer
         note_count:
           title: Note Count
+          type: integer
+        credit_count:
+          description: "Times the agent told the user a note shaped its work: assistant\
+            \ lines carrying `From Hindsight memory (live session)`."
+          title: Credit Count
+          type: integer
+        dismissed_count:
+          description: "Times the agent told the user about a note it did not need:\
+            \ assistant lines carrying `Hindsight note (live session)`."
+          title: Dismissed Count
           type: integer
         last_seq:
           title: Last Seq
@@ -13834,6 +13850,8 @@ components:
       - check_count
       - checking
       - created_at
+      - credit_count
+      - dismissed_count
       - document_id
       - event_count
       - last_seq

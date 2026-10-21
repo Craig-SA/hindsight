@@ -29,6 +29,10 @@ type SessionSummary struct {
 	EventCount int32 `json:"event_count"`
 	CheckCount int32 `json:"check_count"`
 	NoteCount int32 `json:"note_count"`
+	// Times the agent told the user a note shaped its work: assistant lines carrying `From Hindsight memory (live session)`.
+	CreditCount int32 `json:"credit_count"`
+	// Times the agent told the user about a note it did not need: assistant lines carrying `Hindsight note (live session)`.
+	DismissedCount int32 `json:"dismissed_count"`
 	LastSeq int32 `json:"last_seq"`
 	SavedSeq int32 `json:"saved_seq"`
 	AckedSeq int32 `json:"acked_seq"`
@@ -44,7 +48,7 @@ type _SessionSummary SessionSummary
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewSessionSummary(sessionId string, documentId string, live bool, retain string, eventCount int32, checkCount int32, noteCount int32, lastSeq int32, savedSeq int32, ackedSeq int32, checking bool, createdAt time.Time) *SessionSummary {
+func NewSessionSummary(sessionId string, documentId string, live bool, retain string, eventCount int32, checkCount int32, noteCount int32, creditCount int32, dismissedCount int32, lastSeq int32, savedSeq int32, ackedSeq int32, checking bool, createdAt time.Time) *SessionSummary {
 	this := SessionSummary{}
 	this.SessionId = sessionId
 	this.DocumentId = documentId
@@ -53,6 +57,8 @@ func NewSessionSummary(sessionId string, documentId string, live bool, retain st
 	this.EventCount = eventCount
 	this.CheckCount = checkCount
 	this.NoteCount = noteCount
+	this.CreditCount = creditCount
+	this.DismissedCount = dismissedCount
 	this.LastSeq = lastSeq
 	this.SavedSeq = savedSeq
 	this.AckedSeq = ackedSeq
@@ -235,6 +241,54 @@ func (o *SessionSummary) GetNoteCountOk() (*int32, bool) {
 // SetNoteCount sets field value
 func (o *SessionSummary) SetNoteCount(v int32) {
 	o.NoteCount = v
+}
+
+// GetCreditCount returns the CreditCount field value
+func (o *SessionSummary) GetCreditCount() int32 {
+	if o == nil {
+		var ret int32
+		return ret
+	}
+
+	return o.CreditCount
+}
+
+// GetCreditCountOk returns a tuple with the CreditCount field value
+// and a boolean to check if the value has been set.
+func (o *SessionSummary) GetCreditCountOk() (*int32, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.CreditCount, true
+}
+
+// SetCreditCount sets field value
+func (o *SessionSummary) SetCreditCount(v int32) {
+	o.CreditCount = v
+}
+
+// GetDismissedCount returns the DismissedCount field value
+func (o *SessionSummary) GetDismissedCount() int32 {
+	if o == nil {
+		var ret int32
+		return ret
+	}
+
+	return o.DismissedCount
+}
+
+// GetDismissedCountOk returns a tuple with the DismissedCount field value
+// and a boolean to check if the value has been set.
+func (o *SessionSummary) GetDismissedCountOk() (*int32, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.DismissedCount, true
+}
+
+// SetDismissedCount sets field value
+func (o *SessionSummary) SetDismissedCount(v int32) {
+	o.DismissedCount = v
 }
 
 // GetLastSeq returns the LastSeq field value
@@ -448,6 +502,8 @@ func (o SessionSummary) ToMap() (map[string]interface{}, error) {
 	toSerialize["event_count"] = o.EventCount
 	toSerialize["check_count"] = o.CheckCount
 	toSerialize["note_count"] = o.NoteCount
+	toSerialize["credit_count"] = o.CreditCount
+	toSerialize["dismissed_count"] = o.DismissedCount
 	toSerialize["last_seq"] = o.LastSeq
 	toSerialize["saved_seq"] = o.SavedSeq
 	toSerialize["acked_seq"] = o.AckedSeq
@@ -474,6 +530,8 @@ func (o *SessionSummary) UnmarshalJSON(data []byte) (err error) {
 		"event_count",
 		"check_count",
 		"note_count",
+		"credit_count",
+		"dismissed_count",
 		"last_seq",
 		"saved_seq",
 		"acked_seq",
