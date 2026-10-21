@@ -148,6 +148,20 @@ async def test_the_agent_telling_the_user_about_notes_is_counted_once(memory, re
     assert (summary.credit_count, summary.dismissed_count) == (1, 1)
 
 
+async def test_an_event_carrying_a_nul_is_stored_without_it(memory, request_context):
+    """jsonb rejects U+0000: a tool result with one used to fail the whole append (a 500)."""
+    bank = _bank()
+    s = memory.sessions
+    await s.append(
+        bank,
+        "s1",
+        _req({"id": "r", "role": "tool", "kind": "tool_result", "call_id": "x", "text": "bin\x00ary"}),
+        request_context=request_context,
+    )
+    log = (await s.events(bank, "s1", request_context=request_context)).items
+    assert [e.payload["text"] for e in log] == ["binary"]
+
+
 async def test_without_watch_no_check_runs(memory, request_context, monkeypatch):
     calls: list[dict] = []
     monkeypatch.setattr(memory, "reflect_async", _reflect_stub([("note", [])], calls))

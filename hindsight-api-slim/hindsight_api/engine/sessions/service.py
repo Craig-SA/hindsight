@@ -43,6 +43,7 @@ from ...config import get_config
 from ...extensions import BankReadOperation, BankWriteOperation
 from ...worker.exceptions import DeferOperation
 from ..db_utils import acquire_with_retry
+from ..llm_wrapper import sanitize_value
 from ..schema import fq_table
 from . import watch as W
 from .models import (
@@ -347,7 +348,9 @@ class SessionService:
                     if event.id in known or event.id in seen:
                         continue
                     seen.add(event.id)
-                    payload = event.payload
+                    # Tool output can carry a NUL (or a lone surrogate), which jsonb rejects: one such
+                    # event failed the whole append, and the client resent it on every append after.
+                    payload = sanitize_value(event.payload)
                     if settings["live"]:
                         step = W.step_of(event.kind, payload["role"], payload)
                         if step is not None:
