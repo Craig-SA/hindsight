@@ -33,6 +33,7 @@ import {
 import { SESSION_HARNESSES } from "./session-events";
 import { sessionsUnsupported, type SyncResult } from "./session-sync";
 import { notesKey, sessionStateDir, syncHarnessSession } from "./live-entry";
+import { notesForUser } from "./live";
 import { readClaudeTranscript } from "./transcript";
 import { appendJournalTurn, journalPath, readJournalTranscript } from "./turn-journal";
 import { stripInjectedMemory } from "./transcript-util";
@@ -86,10 +87,12 @@ export interface RetainHookSpec {
    * read of the ephemeral transcript the host is about to delete, and closing the turn is a write.
    */
   /**
-   * Whether this Stop hook may hand over a late live-session note by keeping the agent going
-   * (Claude Code's `decision: "block"`); otherwise the note waits for the next prompt.
+   * Whether this Stop hook can show the user a message (Claude Code's `systemMessage`). A late
+   * live-session note always waits for the next prompt to reach the agent; where the host can, the
+   * user also sees it now. It used to keep the agent going with `decision: "block"`, which Claude
+   * Code shows as "Stop hook error": the user read memory at work as a failure.
    */
-  stopDeliversNotes?: boolean;
+  stopShowsNotes?: boolean;
   journal?: {
     /** The assistant reply for this turn, from the Stop event. "" when the host sent none. */
     assistantText(event: Record<string, unknown>): string;
@@ -285,9 +288,9 @@ export async function runRetainHook(
             .join("\n\n")
         : "";
       if (notes) {
-        if (spec.stopDeliversNotes)
-          process.stdout.write(JSON.stringify({ decision: "block", reason: notes }));
-        else stashPendingContext(notesKey(spec.harness), sessionId, notes); // the next prompt hands it over
+        stashPendingContext(notesKey(spec.harness), sessionId, notes); // the next prompt hands it over
+        if (spec.stopShowsNotes)
+          process.stdout.write(JSON.stringify({ systemMessage: notesForUser(notes) }));
       }
       await buildRetain({
         harness: spec.harness,

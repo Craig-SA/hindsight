@@ -87,3 +87,20 @@ export function sourceDiff(cwd: string): string {
     out += git(cwd, "diff", "--no-index", "/dev/null", f);
   return out;
 }
+
+/**
+ * Late notes as the user reads them at the end of a turn: what each note says, without the
+ * instructions written for the agent (where to check it, how to credit it).
+ */
+export function notesForUser(rendered: string): string {
+  const says = rendered
+    .split("\n\n")
+    .map((n) =>
+      n
+        .replace(/^🧠 Note (#\d+ )?from this project's memory \([^)]*\):\s*/, "")
+        .split(" Source: ")[0]
+        .trim()
+    )
+    .filter(Boolean);
+  return `🧠 Hindsight has a note for the agent (it reads it with your next message):\n${says.map((t) => `- ${t}`).join("\n")}`;
+}

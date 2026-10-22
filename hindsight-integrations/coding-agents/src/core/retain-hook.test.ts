@@ -8,6 +8,9 @@ import type { TransportTurn } from "./chat";
 import { type RawConfig, resolveConfig } from "./config";
 import type { HindsightClient } from "./hindsight";
 import { buildRetain, runRetainHook } from "./retain-hook";
+import { NOTE_LEAD } from "./live";
+import { notesKey } from "./live-entry";
+import { takePendingContext } from "./session-cache";
 import { fingerprintTurns, memoryCursorStore, type RetainCursorStore } from "./retain-cursor";
 import { readCodexTranscript } from "./transcript-codex";
 import { dcodeAssistantText } from "./transcript-dcode";
@@ -933,7 +936,7 @@ describe("runRetainHook with the live session on a session", () => {
       transcriptPath: ev.transcript_path as string,
       cwd: ev.cwd as string,
     }),
-    stopDeliversNotes: true,
+    stopShowsNotes: true,
   };
   let written: string[];
 
@@ -967,14 +970,22 @@ describe("runRetainHook with the live session on a session", () => {
     return { retain, makeClient };
   };
 
-  it("leaves saving to the session and hands a late note over by keeping the agent going", async () => {
-    syncAnswer = async () => ({ notes: ["K is 1024."], unsupported: false });
+  it("leaves saving to the session; a late note is shown to the user, never as an error, and waits for the next prompt", async () => {
+    const rendered = `${NOTE_LEAD.replace("Note", "Note #7")} K is 1024. Source: git show abc. Tell the user about it: …`;
+    syncAnswer = async () => ({ notes: [rendered], unsupported: false });
     const { retain, makeClient } = stubClient();
     await runRetainHook(spec, makeClient);
     expect(retain).not.toHaveBeenCalled();
+    // No `decision: "block"`: Claude Code labels that "Stop hook error".
     expect(written.map((w) => JSON.parse(w))).toEqual([
-      { decision: "block", reason: "K is 1024." },
+      {
+        systemMessage:
+          "🧠 Hindsight has a note for the agent (it reads it with your next message):\n- K is 1024.",
+      },
     ]);
+    expect(takePendingContext(notesKey("claude-code"), `sess-live-${basename(root)}`)).toBe(
+      rendered
+    );
   });
 
   it("never writes back itself when the session sync failed: the session saves the turn later", async () => {

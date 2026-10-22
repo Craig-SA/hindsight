@@ -305,8 +305,9 @@ export const HOOK_HARNESSES: Record<HookHarnessName, HookHarnessSpec> = {
       hostTimeoutSec: 60,
       harness: "claude-code",
       accept: notGrokHosted,
-      // A late live-session note keeps the agent going (`decision: "block"`) instead of waiting a turn.
-      stopDeliversNotes: true,
+      // A late live-session note is shown to the user at once (`systemMessage`), and reaches the agent
+      // with the next prompt. Not `decision: "block"`: Claude Code labels that "Stop hook error".
+      stopShowsNotes: true,
       parse: (ev) => ({
         sessionId: ev.session_id as string | undefined,
         transcriptPath: ev.transcript_path as string | undefined,
@@ -332,7 +333,7 @@ export const HOOK_HARNESSES: Record<HookHarnessName, HookHarnessSpec> = {
     retain: {
       hostTimeoutSec: 60,
       harness: "codex",
-      // Codex's Stop hook is not known to take `decision: "block"`: a late note waits for the next prompt.
+      // Codex's Stop hook shows no message: a late note just waits for the next prompt.
       parse: (ev) => ({
         sessionId: ev.session_id as string | undefined,
         transcriptPath: ev.transcript_path as string | undefined,
