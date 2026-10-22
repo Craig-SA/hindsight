@@ -19,8 +19,10 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import quote
+
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,43 @@ class AppendResult:
     checking: bool = False
 
 
+class SessionOptions(BaseModel):
+    """How the session is set up (the API's ``session`` field), sent until the first append succeeds."""
+
+    document_id: str
+    live: bool = True
+    retain: Literal["turns", "idle", "off"] = "turns"
+    metadata: dict[str, str] = {}
+    context: str | None = None
+    strategy: str | None = None
+    tags: list[str] | None = None
+    observation_scopes: str | list[list[str]] | None = None
+
+
+class _AppendBody(BaseModel):
+    # OpenAI-style messages, passed through as Hermes built them.
+    messages: list[dict[str, Any]]
+    ack: int
+    turn_end: bool | None = None
+    session: SessionOptions | None = None
+
+
+class _NoteSource(BaseModel):
+    quote: str = ""
+    document_id: str = ""
+
+
+class _Note(BaseModel):
+    seq: int
+    text: str = ""
+    source: _NoteSource | None = None
+
+
+class _AppendReply(BaseModel):
+    notes: list[_Note] = []
+    checking: bool = False
+
+
 class SessionLink:
     """One Hermes session's link to its Hindsight session. Notes are handed over until acknowledged:
     ``take_notes`` returns the ones not delivered yet, and the next request acknowledges them."""
@@ -51,12 +90,12 @@ class SessionLink:
         api_key: str,
         bank_id: str,
         session_id: str,
-        options: dict[str, Any],
+        options: SessionOptions,
         timeout: float = 10.0,
     ) -> None:
         self._url = f"{api_url.rstrip('/')}/v1/default/banks/{quote(bank_id, safe='')}/sessions/{quote(session_id, safe='')}/events"
         self._api_key = api_key
-        self._options: dict[str, Any] | None = options  # sent until the first append succeeds
+        self._options: SessionOptions | None = options  # sent until the first append succeeds
         self._timeout = timeout
         self._acked = 0
         self._pending: list[SessionNote] = []
@@ -64,18 +103,14 @@ class SessionLink:
         self.supported = True
 
     def append(self, messages: list[dict[str, Any]] | None = None, *, turn_end: bool = False) -> AppendResult:
-        body: dict[str, Any] = {"messages": messages or [], "ack": self._acked}
-        if turn_end:
-            body["turn_end"] = True
-        if self._options is not None:
-            body["session"] = self._options
-        req = urllib.request.Request(self._url, data=json.dumps(body).encode(), method="POST")
+        body = _AppendBody(messages=messages or [], ack=self._acked, turn_end=turn_end or None, session=self._options)
+        req = urllib.request.Request(self._url, data=body.model_dump_json(exclude_none=True).encode(), method="POST")
         req.add_header("Content-Type", "application/json")
         if self._api_key:
             req.add_header("Authorization", f"Bearer {self._api_key}")
         try:
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
-                data = json.loads(resp.read() or b"{}")
+                reply = _AppendReply.model_validate_json(resp.read() or b"{}")
         except urllib.error.HTTPError as e:
             if e.code in (404, 405):
                 # A server without sessions: the provider goes back to its own per-turn retain.
@@ -85,17 +120,17 @@ class SessionLink:
         self._options = None
         notes = [
             SessionNote(
-                seq=int(n["seq"]),
-                text=str(n.get("text") or ""),
-                quote=str((n.get("source") or {}).get("quote") or ""),
-                document_id=str((n.get("source") or {}).get("document_id") or ""),
+                seq=n.seq,
+                text=n.text,
+                quote=n.source.quote if n.source else "",
+                document_id=n.source.document_id if n.source else "",
             )
-            for n in data.get("notes") or []
+            for n in reply.notes
         ]
         with self._lock:
             known = {n.seq for n in self._pending}
             self._pending += [n for n in notes if n.seq not in known]
-        return AppendResult(supported=True, notes=notes, checking=bool(data.get("checking")))
+        return AppendResult(supported=True, notes=notes, checking=reply.checking)
 
     def take_notes(self, wait_s: float = 0.0) -> list[SessionNote]:
         """The notes not handed over yet. With ``wait_s``, asks the session for up to that long while a

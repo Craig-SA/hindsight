@@ -48,7 +48,10 @@ from ..schema import fq_table
 from . import watch as W
 from .models import (
     MAX_EVENT_TEXT,
+    CheckLog,
     ContentPart,
+    NoteLog,
+    SavedTurn,
     SessionAppendRequest,
     SessionAppendResponse,
     SessionEvent,
@@ -57,6 +60,7 @@ from .models import (
     SessionNote,
     SessionNoteSource,
     SessionOptions,
+    SessionSettings,
     SessionSummary,
 )
 
@@ -164,16 +168,18 @@ def default_document_id(session_id: str) -> str:
     return f"session:{session_id}"
 
 
-def _settings_of(opts: SessionOptions | None, current: dict[str, Any] | None = None) -> dict[str, Any]:
-    out = dict(current or {})
-    if opts is not None:
-        for key in ("live", "retain", "tags", "context", "strategy", "observation_scopes"):
-            value = getattr(opts, key)
-            if value is not None:
-                out[key] = value
-    out.setdefault("live", False)
-    out.setdefault("retain", "turns")
-    return out
+def _settings_of(opts: SessionOptions | None, stored: Any = None) -> SessionSettings:
+    """The session's settings: what is stored (the `settings` column, parsed), with the options an
+    append carries merged over it; the defaults where neither sets a field."""
+    current = SessionSettings.model_validate(stored or {})
+    if opts is None:
+        return current
+    update = {
+        k: v
+        for k in ("live", "retain", "tags", "context", "strategy", "observation_scopes")
+        if (v := getattr(opts, k)) is not None
+    }
+    return current.model_copy(update=update)
 
 
 def _now() -> datetime:
@@ -198,19 +204,19 @@ def _action_line(tool: str, data: dict[str, Any]) -> str:
     return f"{tool} {target}".strip()
 
 
-def _turn(kind: str, payload: dict[str, Any], at: datetime) -> dict[str, str] | None:
+def _turn(kind: str, payload: dict[str, Any], at: datetime) -> SavedTurn | None:
     """One logged client event as a saved transcript line, or None when it is not saved: what was
     said, and one compact line per tool call. Tool output, state snapshots and markers are left out."""
     role = payload.get("role")
     if kind == "message" and role in ("user", "assistant") and (payload.get("text") or "").strip():
-        return {"role": role, "content": payload["text"], "timestamp": at.isoformat()}
+        return SavedTurn(role=role, content=payload["text"], timestamp=at.isoformat())
     if kind == "tool_call" and payload.get("tool"):
         inp = payload.get("input")
-        return {
-            "role": "action",
-            "content": _action_line(payload["tool"], inp if isinstance(inp, dict) else {}),
-            "timestamp": at.isoformat(),
-        }
+        return SavedTurn(
+            role="action",
+            content=_action_line(payload["tool"], inp if isinstance(inp, dict) else {}),
+            timestamp=at.isoformat(),
+        )
     return None
 
 
@@ -290,7 +296,7 @@ class SessionService:
                     bank_id,
                     session_id,
                     (opts.document_id if opts and opts.document_id else default_document_id(session_id)),
-                    json.dumps(_settings_of(opts)),
+                    _settings_of(opts).model_dump_json(),
                     json.dumps(opts.metadata if opts and opts.metadata else {}),
                 )
                 row = await conn.fetchrow(
@@ -355,7 +361,7 @@ class SessionService:
                     # Tool output can carry a NUL (or a lone surrogate), which jsonb rejects: one such
                     # event failed the whole append, and the client resent it on every append after.
                     payload = sanitize_value(event.payload)
-                    if settings["live"]:
+                    if settings.live:
                         step = W.step_of(event.kind, payload["role"], payload)
                         if step is not None:
                             W.read_step(state, step, seq)
@@ -429,7 +435,7 @@ class SessionService:
                         len(rows),
                         acked,
                         state.model_dump_json(),
-                        json.dumps(settings),
+                        settings.model_dump_json(),
                         json.dumps(metadata),
                         len(rows),
                         1 if state.pending is not None else 0,
@@ -441,16 +447,16 @@ class SessionService:
                 )
                 if notes:
                     await self._hand_off(conn, bank_id, session_id, notes, [r[0] for r in rows])
-                checking = settings["live"] and _checking(state, row["checking_since"])
+                checking = settings.live and _checking(state, row["checking_since"])
         if created_bank:
             await engine._apply_default_bank_template(bank_id, request_context)
         # Only when this append brought something: the moment was queued by the append that made it.
-        if rows and settings["live"] and state.pending is not None:
+        if rows and settings.live and state.pending is not None:
             await self._queue_check(bank_id, session_id, request_context)
         long_turn = rows and seq - 1 - int(row["saved_seq"]) >= SAVE_EVERY_EVENTS
-        if settings["retain"] == "turns" and (turn_ended or long_turn):
+        if settings.retain == "turns" and (turn_ended or long_turn):
             await self._queue_save(bank_id, session_id, request_context)
-        elif rows and settings["retain"] != "off":
+        elif rows and settings.retain != "off":
             # At most one idle timer waits per session (dedupe): it covers every append after it.
             await self._queue(IDLE_TASK, "session-idle", bank_id, session_id, request_context)
         return SessionAppendResponse(notes=notes, checking=checking)
@@ -496,7 +502,7 @@ class SessionService:
                     await self._hand_off(conn, bank_id, session_id, notes, [])
             return SessionAppendResponse(
                 notes=notes,
-                checking=bool(settings["live"]) and _checking(state, row["checking_since"]),
+                checking=settings.live and _checking(state, row["checking_since"]),
             )
 
     async def _handed(self, conn: Any, bank_id: str, session_id: str, notes: list[SessionNote]) -> set[str]:
@@ -707,8 +713,8 @@ class SessionService:
         )
         return at if at > row["db_now"] else None
 
-    def _check_payload(self, m: W.Moment, **extra: Any) -> dict[str, Any]:
-        return {"trigger": m.trigger, "moment_seq": m.seq, "moment": m.text[:2000], **extra}
+    def _check_payload(self, m: W.Moment, **extra: Any) -> CheckLog:
+        return CheckLog(trigger=m.trigger, moment_seq=m.seq, moment=m.text[:2000], **extra)
 
     async def _check(
         self, bank_id: str, session_id: str, m: W.Moment, goal: str, sent: list[str], rc: RequestContext
@@ -798,13 +804,9 @@ class SessionService:
                         bank_id,
                         session_id,
                         "note",
-                        {
-                            "text": text,
-                            "trigger": m.trigger,
-                            "check_seq": check_seq,
-                            "memory_ids": memory_ids,
-                            "source": source.model_dump(mode="json") if source else None,
-                        },
+                        NoteLog(
+                            text=text, trigger=m.trigger, check_seq=check_seq, memory_ids=memory_ids, source=source
+                        ),
                     )
                 await conn.execute(
                     f"""
@@ -820,7 +822,13 @@ class SessionService:
                 )
 
     async def _log(
-        self, conn: Any, bank_id: str, session_id: str, kind: str, payload: dict[str, Any], event_id: str = ""
+        self,
+        conn: Any,
+        bank_id: str,
+        session_id: str,
+        kind: str,
+        payload: CheckLog | NoteLog | dict[str, Any],
+        event_id: str = "",
     ) -> int:
         """Append one of Hindsight's own entries (a check, a note, a save) to the session log, at the
         next position. Needs the session row locked."""
@@ -841,7 +849,10 @@ class SessionService:
             seq,
             event_id or f"hindsight:{seq}",
             kind,
-            json.dumps(payload, default=str),
+            # A typed entry leaves out its unset fields, so the log keeps the shape it always had.
+            payload.model_dump_json(exclude_none=True)
+            if isinstance(payload, BaseModel)
+            else json.dumps(payload, default=str),
         )
         await conn.execute(
             f"UPDATE {fq_table('sessions')} SET next_seq = $3 WHERE bank_id = $1 AND session_id = $2",
@@ -981,26 +992,26 @@ class SessionService:
                 # The document names itself, as the coding-agents transcripts always have: a reader of
                 # a memory's source can find the session it came from.
                 turns.insert(
-                    0, {"role": "system", "content": f"REF-ID: {document_id}", "timestamp": turns[0]["timestamp"]}
+                    0, SavedTurn(role="system", content=f"REF-ID: {document_id}", timestamp=turns[0].timestamp)
                 )
             item: dict[str, Any] = {
-                "content": "\n".join(json.dumps(t, ensure_ascii=False) for t in turns),
-                "context": settings.get("context") or DEFAULT_SAVE_CONTEXT,
+                "content": "\n".join(json.dumps(t.model_dump(), ensure_ascii=False) for t in turns),
+                "context": settings.context or DEFAULT_SAVE_CONTEXT,
                 "document_id": document_id,
                 "timestamp": row["created_at"].isoformat(),
                 "update_mode": "append",
                 # The session's own metadata, as the client set it, plus which session wrote it.
                 "metadata": {**{k: str(v) for k, v in metadata.items()}, "session_id": session_id},
             }
-            if settings.get("tags"):
-                item["tags"] = settings["tags"]
-            if settings.get("observation_scopes") is not None:
-                item["observation_scopes"] = settings["observation_scopes"]
+            if settings.tags:
+                item["tags"] = settings.tags
+            if settings.observation_scopes is not None:
+                item["observation_scopes"] = settings.observation_scopes
             await self._engine.submit_async_retain(
                 bank_id,
                 [item],
                 request_context=rc,
-                strategy=settings.get("strategy"),
+                strategy=settings.strategy,
                 operation_id=plan.operation_id,
             )
         async with acquire_with_retry(backend) as conn:
@@ -1114,7 +1125,7 @@ class SessionService:
                     )
                     for r in rows
                 ],
-                checking=bool(settings["live"]) and _checking(state, head["checking_since"]),
+                checking=settings.live and _checking(state, head["checking_since"]),
             )
 
     def _summary(self, conn: Any, r: Any) -> SessionSummary:
@@ -1123,8 +1134,8 @@ class SessionService:
         return SessionSummary(
             session_id=r["session_id"],
             document_id=r["document_id"],
-            live=bool(settings["live"]),
-            retain=settings["retain"],
+            live=settings.live,
+            retain=settings.retain,
             event_count=int(r["event_count"]),
             check_count=int(r["check_count"]),
             note_count=int(r["note_count"]),
@@ -1133,7 +1144,7 @@ class SessionService:
             last_seq=int(r["next_seq"]) - 1,
             saved_seq=int(r["saved_seq"]),
             acked_seq=int(r["acked_seq"]),
-            checking=bool(settings["live"]) and _checking(state, r["checking_since"]),
+            checking=settings.live and _checking(state, r["checking_since"]),
             created_at=r["created_at"],
             last_event_at=r["last_event_at"],
             metadata=conn.parse_json(r["metadata"]) or {},

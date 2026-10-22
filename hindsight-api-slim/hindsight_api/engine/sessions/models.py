@@ -193,3 +193,54 @@ class SessionListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class SessionSettings(BaseModel):
+    """What a session keeps of its options (the `settings` column): the defaults applied, later
+    appends' options merged over it."""
+
+    live: bool = False
+    retain: Literal["turns", "idle", "off"] = "turns"
+    tags: list[str] | None = None
+    context: str | None = None
+    strategy: str | None = None
+    observation_scopes: Literal["per_tag", "combined", "all_combinations", "shared"] | list[list[str]] | None = None
+
+
+class SavedTurn(BaseModel):
+    """One line of the transcript a save writes into the session's document."""
+
+    role: str
+    content: str
+    timestamp: str
+
+
+class CheckLog(BaseModel):
+    """A check's entry in the session log: the moment judged and what came of it."""
+
+    trigger: str
+    moment_seq: int
+    moment: str
+    outcome: str
+    reason: str | None = None
+    error: str | None = None
+    ms: int | None = None
+    question: str | None = None
+    context: str | None = None
+    search_queries: list[str] | None = None
+    answer: str | None = None
+    abstained: bool | None = None
+    memory_ids: list[str] | None = None
+    # The reflect's token usage and its LLM call traces, as the engine reports them.
+    usage: dict[str, Any] | None = None
+    llm_calls: list[dict[str, Any]] | None = None
+
+
+class NoteLog(BaseModel):
+    """A note's entry in the session log."""
+
+    text: str
+    trigger: str
+    check_seq: int
+    memory_ids: list[str]
+    source: SessionNoteSource | None = None

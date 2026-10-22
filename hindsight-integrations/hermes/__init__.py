@@ -49,7 +49,7 @@ from .embedded import (
     _start_daemon,
     _stop_daemon,
 )
-from .sessions import SessionLink, notes_block, tool_call_messages, turn_messages
+from .sessions import SessionLink, SessionOptions, notes_block, tool_call_messages, turn_messages
 from .settings import (
     _DEFAULT_API_URL,
     _DEFAULT_IDLE_TIMEOUT,
@@ -1684,24 +1684,22 @@ class HindsightMemoryProvider(MemoryProvider):
         if not self._live_session or self._mode == "disabled" or not self._session_id:
             return None
         if self._session_link is None:
-            options: dict[str, Any] = {
-                "document_id": self._document_id,
-                "live": True,
-                "retain": "turns" if self._auto_retain else "off",
-                "metadata": {"harness": "hermes", "session_id": self._session_id},
-                "context": self._retain_context,
-                "strategy": self._retain_strategy or None,
-            }
-            if self._tags:
-                options["tags"] = self._tags
-            if self._observation_scopes:
-                options["observation_scopes"] = self._observation_scopes
+            options = SessionOptions(
+                document_id=self._document_id,
+                live=True,
+                retain="turns" if self._auto_retain else "off",
+                metadata={"harness": "hermes", "session_id": self._session_id},
+                context=self._retain_context,
+                strategy=self._retain_strategy or None,
+                tags=self._tags or None,
+                observation_scopes=self._observation_scopes or None,
+            )
             self._session_link = SessionLink(
                 api_url=self._api_url,
                 api_key=self._api_key or "",
                 bank_id=self._bank_id,
                 session_id=self._session_id,
-                options={k: v for k, v in options.items() if v is not None},
+                options=options,
                 timeout=float(self._timeout),
             )
         return self._session_link if self._session_link.supported else None
@@ -1730,7 +1728,9 @@ class HindsightMemoryProvider(MemoryProvider):
             return ""
         return notes_block(notes) if notes else ""
 
-    def _sync_session_turn(self, user_content: str, assistant_content: str, messages: list | None) -> bool:
+    def _sync_session_turn(
+        self, user_content: str, assistant_content: str, messages: list[dict[str, Any]] | None
+    ) -> bool:
         """Send the finished turn into the session; False when there is no session to send it to."""
         link = self._session()
         if link is None:
@@ -1750,7 +1750,9 @@ class HindsightMemoryProvider(MemoryProvider):
         # A server without sessions said so on this append: the turn is retained the old way.
         return link.supported
 
-    def on_tool_result(self, tool_name: str = "", args: Any = None, result: Any = None, tool_call_id: str = "", **_):
+    def on_tool_result(
+        self, tool_name: str = "", args: Any = None, result: Any = None, tool_call_id: str = "", **_: Any
+    ) -> str | None:
         """Hermes' ``transform_tool_result`` hook: the call goes into the session as soon as the tool
         returns, so the live session checks it mid-turn, and any note already back rides on this result. Never
         waits for a check: a note that is not back yet reaches the agent on a later tool result."""
