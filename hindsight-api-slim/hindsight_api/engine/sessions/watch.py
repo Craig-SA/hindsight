@@ -72,10 +72,13 @@ TARGET_KEYS = ("command", "cmd", "file_path", "path", "notebook_path", "filename
 # Keys that carry the new text of an edit, when the client sends no diff.
 EDIT_TEXT_KEYS = ("new_string", "content", "patch", "diff", "new_str", "file_text", "input")
 # Commands that change nothing, or only run checks: no moment.
+# A `cd` may end its line instead of `&&`/`;` (beta: 11 of a session's 14 checks were `cd <repo>` then
+# `git grep` / `gh run view` on the next line, each a reflect that found nothing).
 READ_ONLY_CMD = re.compile(
-    r"^\s*(cd [^;&|]+(&&|;)\s*)?(cat|ls|find|grep|rg|head|tail|wc|tree|file|which|pwd|echo|sed -n|awk|"
-    r"git (status|diff|log|show|blame)|python3? -m pytest|pytest|python3? -c|python3? -I -c|pip3? install|"
-    r"npm (test|run test)|npx (vitest|jest))\b"
+    r"^\s*(cd [^;&|\n]+(&&|;|\n)\s*)?(cat|ls|find|grep|rg|head|tail|wc|tree|file|which|pwd|echo|sed -n|awk|"
+    r"command -v|git (status|diff|log|show|blame|grep|fetch|rev-parse|ls-files)|"
+    r"gh (run (view|list)|pr (view|list|diff|checks)|issue (view|list))|python3? -m pytest|pytest|"
+    r"python3? -c|python3? -I -c|pip3? install|npm (test|run test)|npx (vitest|jest))\b"
 )
 # The sandbox failing, not the project: no moment.
 ENV_TROUBLE = re.compile(r"command not found|No module named (pytest|pip)")

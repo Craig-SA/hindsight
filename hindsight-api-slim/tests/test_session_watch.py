@@ -226,3 +226,16 @@ def test_an_edit_without_a_diff_is_judged_by_its_own_text():
     m = W.take_moment(s)
     assert m is not None and m.trigger == "edit" and W.search_queries(m) == ["Change to pay.py:\nHALF_UP"]
     assert W.skip_reason(s, m) is None
+
+
+def test_a_read_after_a_cd_on_its_own_line_is_not_a_moment():
+    """Beta: `cd <repo>` then `git grep` / `gh run view` on the next line ran a check each (11 of 14)."""
+    for cmd in (
+        "cd /repo\ngit grep -nE '^FROM ' -- '*Dockerfile*'",
+        "cd /repo\ngh run view 39605604118 --json jobs",
+        "cd /repo\ngit fetch -q origin main && git show origin/main:uv.lock",
+        "command -v docker >/dev/null && docker info",
+    ):
+        assert W.READ_ONLY_CMD.match(cmd), cmd
+    for cmd in ("cd /repo\nrm -rf build", "cd /repo\ngit push origin main", "gh pr merge 63", "gh run rerun 1"):
+        assert not W.READ_ONLY_CMD.match(cmd), cmd
