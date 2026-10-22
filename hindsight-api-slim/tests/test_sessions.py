@@ -5,6 +5,7 @@ returns. Reflect and retain are stubbed: what they do with a moment is tested el
 about what the session does around them.
 """
 
+import asyncio
 import json
 import uuid
 
@@ -193,6 +194,29 @@ async def test_a_note_built_only_from_this_session_is_not_sent(memory, request_c
     assert any(e.kind == "note" for e in log) is noted
     assert check["outcome"] == ("note" if noted else "repeat")
     assert (check.get("reason") == "this session") is (not noted)
+
+
+async def test_a_check_that_runs_too_long_gives_up_and_the_session_goes_on(memory, request_context, monkeypatch):
+    """A note after the agent has moved on is no use: a check past CHECK_TIMEOUT_S is logged as timed out."""
+    from hindsight_api.engine.sessions import service as svc
+
+    monkeypatch.setattr(svc, "CHECK_TIMEOUT_S", 0.2)
+
+    async def slow_reflect(**kwargs):
+        await asyncio.sleep(5)
+
+    monkeypatch.setattr(memory, "reflect_async", slow_reflect)
+    bank, s = _bank(), memory.sessions
+    await s.append(
+        bank,
+        "s1",
+        _req({"id": "1", "role": "user", "text": "Fix the rounding in pay/rounding.py"}, live=True, retain="off"),
+        request_context=request_context,
+    )
+    log = (await s.events(bank, "s1", request_context=request_context)).items
+    check = next(e for e in log if e.kind == "check").payload
+    assert check["outcome"] == "error" and "timed out" in check["error"]
+    assert not any(e.kind == "note" for e in log)
 
 
 async def test_without_watch_no_check_runs(memory, request_context, monkeypatch):

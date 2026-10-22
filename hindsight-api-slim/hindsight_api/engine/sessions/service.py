@@ -28,6 +28,7 @@ and a check that dies mid-way is retried by the next worker that claims its oper
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -80,6 +81,10 @@ MAX_ROUNDS = 4
 # longer reports itself as checking. The operation itself is retried by the worker poller.
 CHECKING_STALE_S = 300
 REFLECT_MAX_TOKENS = 600
+# A check that has not answered by then gives up: its note would reach an agent that has long moved
+# on. Reflect's own limit is 300 s; in beta checks on a loaded machine took p90 97 s, p99 209 s, and
+# four ran the full 300 s.
+CHECK_TIMEOUT_S = 60
 # A turn that runs this many events without ending is saved anyway: in beta an agent working for hours
 # in one turn saved nothing until it ended (and the idle timer never fires while events keep coming),
 # so a crash lost it all and the eventual save was one huge retain. Saves append only what is new.
@@ -727,17 +732,20 @@ class SessionService:
         error = None
         text, memory_ids, usage, calls, abstained = "", [], None, [], False
         try:
-            result = await self._engine.reflect_async(
-                bank_id=bank_id,
-                query=W.question(m),
-                context=context,
-                budget=Budget.LOW,
-                max_tokens=REFLECT_MAX_TOKENS,
-                fact_types=["observation"],
-                exclude_mental_models=True,
-                abstain=True,
-                search_queries=queries,
-                request_context=rc,
+            result = await asyncio.wait_for(
+                self._engine.reflect_async(
+                    bank_id=bank_id,
+                    query=W.question(m),
+                    context=context,
+                    budget=Budget.LOW,
+                    max_tokens=REFLECT_MAX_TOKENS,
+                    fact_types=["observation"],
+                    exclude_mental_models=True,
+                    abstain=True,
+                    search_queries=queries,
+                    request_context=rc,
+                ),
+                timeout=CHECK_TIMEOUT_S,
             )
             text = (result.text or "").strip()
             abstained = result.abstained
@@ -749,6 +757,9 @@ class SessionService:
             ]
             usage = result.usage.model_dump() if result.usage else None
             calls = [c.model_dump() for c in result.llm_trace]
+        except TimeoutError:
+            logger.warning(f"session check timed out for {bank_id}/{session_id} after {CHECK_TIMEOUT_S}s")
+            error = f"the check timed out after {CHECK_TIMEOUT_S}s"
         except Exception as e:  # a failed check is logged and the session goes on: notes are best-effort
             logger.warning(f"session check failed for {bank_id}/{session_id}: {e}")
             error = str(e)[:500]
