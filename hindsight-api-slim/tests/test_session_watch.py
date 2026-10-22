@@ -120,6 +120,26 @@ def test_a_memory_is_said_once_but_a_heads_up_does_not_use_it_up():
     assert s.sent == ["Before you change x: keep 7", "You set 10, the rule is 7"]
 
 
+def test_a_conflict_restating_an_earlier_one_is_not_sent_again_under_new_memories():
+    """Beta: one new article was flagged three times within minutes, each note from a memory the
+    session's own saves had just rewritten (new ids, so the id guard let it through)."""
+    s = W.WatchState()
+    edit = W.Moment(trigger="edit", text="Write content/articles/voice-agent-memory.md", recent=[], diff="")
+    first = 'The rule is "instead of generating articles automatically." Adding voice-agent-memory.md contradicts it.'
+    again = 'Conflict: the rule is to improve the strongest remaining pages "instead of generating articles automatically." Adding voice-agent-memory.md goes against it.'
+    other = (
+        "Change content/articles/hermes-agent-plugins.md: make v0.22.4 a standalone sentence with its source and date."
+    )
+    assert W.accept_note(s, edit, first, ["m1"])
+    assert not W.accept_note(s, edit, again, ["m2"])  # the same rule, a new memory id
+    assert W.accept_note(s, edit, other, ["m3"])  # a different rule still goes
+    # A heads-up is not compared: the same rule after it, as a conflict, is worth saying.
+    t = W.WatchState()
+    task = W.Moment(trigger="task", text="Fix x", recent=[], diff="")
+    assert W.accept_note(t, task, "Before you change x: keep a 15-folder baseline", ["h1"])
+    assert W.accept_note(t, edit, "Keep a 15-folder baseline: the plan drops it", ["h2"])
+
+
 def test_a_request_is_searched_by_its_sentences_naming_code_then_its_paragraphs():
     m = W.Moment(
         trigger="task",

@@ -102,6 +102,9 @@ class WatchState(BaseModel):
     evidence_sent: list[str] = Field(default_factory=list)
     judged: list[str] = Field(default_factory=list)
     # The notes (by seq) the agent told the user it used, and the ones it said it did not need.
+    # The conflicts already sent (text): the same rule comes back under new memory ids as the
+    # session's saves are consolidated, so the id guard alone let it through again.
+    conflicts: list[str] = Field(default_factory=list)
     credited: list[int] = Field(default_factory=list)
     dismissed: list[int] = Field(default_factory=list)
 
@@ -347,10 +350,23 @@ def accept_note(state: WatchState, m: Moment, text: str, memory_ids: list[str]) 
         return False
     if memory_ids and all(i in state.evidence_sent for i in memory_ids):
         return False
+    # A conflict saying mostly what an earlier conflict said is the same rule again (beta: one
+    # article flagged three times within minutes, each from a rewritten memory). Mostly = 60% of the
+    # shorter note's words: repeats measured 0.6-0.92, a different rule at most 0.45. A heads-up is
+    # not compared: going against it later is worth saying.
+    if m.trigger != "task" and any(_overlap(text, c) >= 0.6 for c in state.conflicts):
+        return False
     state.sent.append(text.strip())
     if m.trigger != "task":
         state.evidence_sent = list(dict.fromkeys([*state.evidence_sent, *memory_ids]))
+        state.conflicts.append(text.strip())
     return True
+
+
+def _overlap(a: str, b: str) -> float:
+    """Share of the shorter text's words that the other one has."""
+    wa, wb = _words(a), _words(b)
+    return len(wa & wb) / max(1, min(len(wa), len(wb)))
 
 
 def readable(text: str) -> str:
