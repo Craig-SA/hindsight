@@ -513,7 +513,11 @@ async def run_task_cancellable_on_disconnect(
         # cancellation, not a fault worth reporting over the 499.
         await asyncio.gather(task, return_exceptions=True)
         logger.info(f"[{operation.upper()} CANCELLED] bank={bank_id} reason={token.reason}")
-        raise HTTPException(status_code=_CLIENT_CLOSED_REQUEST_STATUS_CODE, detail=token.reason)
+        # Chained to the typed cancellation so metrics count it as abandoned, not
+        # failed (#5946), the same as run_cancellable_on_disconnect above.
+        raise HTTPException(
+            status_code=_CLIENT_CLOSED_REQUEST_STATUS_CODE, detail=token.reason
+        ) from OperationCancelledError(token.reason)
     finally:
         waiter.cancel()
         # This call can itself be cancelled from above (server shutdown, a deadline),
