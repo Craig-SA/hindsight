@@ -148,6 +148,16 @@ async def test_the_agent_telling_the_user_about_notes_is_counted_once(memory, re
     summary = await s.get(bank, "s1", request_context=request_context)
     assert (summary.credit_count, summary.dismissed_count) == (1, 1)
 
+    # One line naming two notes credits both; a note first called not needed, then used, counts as used.
+    later = {
+        "id": "a2",
+        "role": "assistant",
+        "text": f"> 🧠 **From Hindsight memory (live session #{used} / #{unneeded})** — I masked nothing after all.",
+    }
+    await s.append(bank, "s1", _req(later), request_context=request_context)
+    summary = await s.get(bank, "s1", request_context=request_context)
+    assert (summary.credit_count, summary.dismissed_count) == (2, 0)
+
 
 async def test_an_event_carrying_a_nul_is_stored_without_it(memory, request_context):
     """jsonb rejects U+0000: a tool result with one used to fail the whole append (a 500)."""

@@ -15,6 +15,9 @@ past session came back as a rule for the project:
 * the agent's own earlier implementation choice became a rule against the user changing it;
 * the user's previous, similar request came back as a reason the new one was wrong.
 
+**A heads-up for a request that changes nothing** (``expect_note=False``): a question or an estimate,
+and a scheduled job told to follow its own instruction file, each got "Before you change ..." anyway.
+
 **A real decision the agent must hear** (``expect_note=True``), so that a check that says nothing
 fails: a decided value, a house rule recorded in a commit message, a rule about who bumps versions,
 and an amended rule, which must reach the agent in its amended form.
@@ -77,6 +80,43 @@ def _chat(*turns: tuple[str, str]) -> str:
 NO_NOTE_OK = " No note at all also meets the criteria."
 
 CASES = (
+    # ---------------------------------------------------------------- a request that changes nothing
+    Case(
+        id="a-question-only",
+        history=(
+            Memory(
+                _chat(
+                    ("user", "the rate limiter allows 120 requests per minute per key, keep it there, never raise it"),
+                    ("assistant", "Set the per-key limit to 120/min in gateway/limits.py."),
+                )
+            ),
+        ),
+        request="How much would it cost per month to serve 10x today's traffic on the current gateway? Just estimate.",
+        action=Action("Read", {"file_path": "gateway/limits.py"}, ""),
+        criteria=(
+            "No note warns the agent about changing the gateway or its rate limit (no 'Before you change ...'): "
+            "the request only asks for an estimate and changes nothing." + NO_NOTE_OK
+        ),
+        expect_note=False,
+    ),
+    Case(
+        id="a-job-run-by-its-own-file",
+        history=(
+            Memory(
+                _chat(
+                    ("user", "write jobs/disk-check/JOB.md: keep at least 60 GB free; prune at most 15 cache folders a run"),
+                    ("assistant", "Wrote JOB.md with the 60 GB floor and the 15-folder limit."),
+                )
+            ),
+        ),
+        request="You are running the scheduled job 'disk-check'. Read jobs/disk-check/JOB.md and do what it says.",
+        action=Action("Read", {"file_path": "jobs/disk-check/JOB.md"}, ""),
+        criteria=(
+            "No note repeats the job's own rules to it as a warning (the 60 GB floor or the 15-folder limit as "
+            "'Before you change ...'): the job's file already states them." + NO_NOTE_OK
+        ),
+        expect_note=False,
+    ),
     # ---------------------------------------------------------------- local context, not a rule
     Case(
         id="one-run-choice",
@@ -276,7 +316,8 @@ CASES = (
         ),
         criteria=(
             "A note tells the agent not to change the package version by hand: versions are bumped only by the "
-            "release script."
+            "release script. Grade the notes, not the agent's edit: a note naming the hand edit as the problem "
+            "meets the criteria."
         ),
         expect_note=True,
     ),

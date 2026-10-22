@@ -92,8 +92,11 @@ SAVE_EVERY_EVENTS = 300
 # How the agent tells the user about a note (the clients ask for these exact lines, naming the note
 # by its seq): one it used, and one it did not need. Read from the assistant messages the client
 # streams in, so every client that asks for the same lines is counted the same way.
-CREDIT_RE = re.compile(r"From Hindsight memory \(live session #(\d+)\)")
-DISMISS_RE = re.compile(r"Hindsight note \(live session #(\d+)\)")
+# One line can name several notes ("live session #10 / #21"): in beta reading only the first left
+# the other counted as not needed.
+CREDIT_RE = re.compile(r"From Hindsight memory \(live session (#\d+[^)]*)\)")
+DISMISS_RE = re.compile(r"Hindsight note \(live session (#\d+[^)]*)\)")
+NOTE_NUMBER_RE = re.compile(r"#(\d+)")
 # How the saved conversation reads to extraction when the client does not say: who is speaking.
 DEFAULT_SAVE_CONTEXT = (
     "conversation between a user and an assistant: user turns are the user's words and decisions, "
@@ -371,8 +374,10 @@ class SessionService:
                         if step is not None:
                             W.read_step(state, step, seq)
                     if event.kind == "message" and payload["role"] == "assistant":
-                        cited.update(int(n) for n in CREDIT_RE.findall(payload["text"]))
-                        said_unneeded.update(int(n) for n in DISMISS_RE.findall(payload["text"]))
+                        for named in CREDIT_RE.findall(payload["text"]):
+                            cited.update(int(n) for n in NOTE_NUMBER_RE.findall(named))
+                        for named in DISMISS_RE.findall(payload["text"]):
+                            said_unneeded.update(int(n) for n in NOTE_NUMBER_RE.findall(named))
                     rows.append((seq, event.id, event.kind, json.dumps(payload)))
                     seq += 1
                 turn_ended = any(r[2] == "turn_end" for r in rows)
@@ -391,11 +396,15 @@ class SessionService:
                             list(cited | said_unneeded),
                         )
                     }
+                    # Used wins: in beta an agent first called a note not needed, then worked by it
+                    # and credited it. A note once used is never counted as not needed.
                     new_credits = sorted((cited & notes_here) - set(state.credited))
-                    new_dismissed = sorted((said_unneeded & notes_here) - set(state.dismissed))
                     state.credited += new_credits
+                    unused_then_used = [n for n in state.dismissed if n in new_credits]
+                    state.dismissed = [n for n in state.dismissed if n not in new_credits]
+                    new_dismissed = sorted((said_unneeded & notes_here) - set(state.dismissed) - set(state.credited))
                     state.dismissed += new_dismissed
-                    credits, dismissed = len(new_credits), len(new_dismissed)
+                    credits, dismissed = len(new_credits), len(new_dismissed) - len(unused_then_used)
                 if rows:
                     await conn.bulk_insert_from_arrays(
                         fq_table("session_events"),
