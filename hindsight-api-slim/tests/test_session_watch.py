@@ -154,6 +154,12 @@ def test_a_request_is_searched_by_its_sentences_naming_code_then_its_paragraphs(
     assert any(q.startswith("Work efficiently") for q in queries)
 
 
+def test_a_command_is_searched_by_its_start():
+    long = "kubectl get sts hindsight-analytics -o jsonpath='{.spec}' && " + "echo x; " * 300
+    m = W.Moment(trigger="command", text=long, recent=[], diff="")
+    assert W.search_queries(m) == [long[: W.COMMAND_QUERY_CAP]]
+
+
 def test_an_edit_is_searched_by_its_diff_in_words():
     m = W.Moment(trigger="edit", text="", recent=[], diff="+++ b/pay/r.py\n@@ def f():\n-x = 1\n+x = 2\n")
     assert W.search_queries(m) == ["Change to pay/r.py (def f():):\n-x = 1\n+x = 2"]

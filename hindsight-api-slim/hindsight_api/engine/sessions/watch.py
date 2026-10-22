@@ -295,6 +295,12 @@ def query_from_diff(diff: str, cap: int = 1500) -> str:
     return q[:cap]
 
 
+# A command or plan is searched by its first 300 chars: the program and its target. At 1500 chars a
+# long shell line filled every reranker pair to the model's limit, and reranking 95 candidates took
+# 30-58 s on a busy laptop — 8 of 19 checks hit the 60 s limit (beta, 2026-10-22).
+COMMAND_QUERY_CAP = 300
+
+
 def search_queries(m: Moment) -> list[str]:
     """What the moment searches. A request is searched by its sentences naming code, then its
     paragraphs: as one query, a harness's boilerplate (role, rules, "work efficiently") outweighed the
@@ -303,7 +309,7 @@ def search_queries(m: Moment) -> list[str]:
     if m.trigger == "edit" and m.diff.strip():
         return [query_from_diff(m.diff)]
     if m.trigger != "task":
-        return [m.text[:1500]]
+        return [m.text[:COMMAND_QUERY_CAP]]
     paras = [p.strip() for p in re.split(r"\n\s*\n", m.text) if len(p.strip()) >= 40]
     named = [
         s.strip()
