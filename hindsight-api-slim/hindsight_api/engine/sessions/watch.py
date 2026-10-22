@@ -94,7 +94,9 @@ READ_ONLY_CMD = re.compile(
 ENV_TROUBLE = re.compile(r"command not found|No module named (pytest|pip)")
 FAILED = re.compile(r"\b\d+ failed\b|Traceback \(most recent call last\)|\bFAILED\b|\bError:")
 # How a delivered note reads when the agent's transcript carries it back.
-OWN_NOTE_MARK = "Note from this project's memory"
+# Notes are numbered since the client names the one it credits ("Note #12 from this project's memory"):
+# the plain substring missed every numbered note, leaving only the sent-text match to catch them.
+OWN_NOTE_MARK = re.compile(r"Note (#\d+ )?from this project's memory")
 
 
 class Pending(BaseModel):
@@ -196,7 +198,7 @@ def _edit_text(inp: dict[str, Any]) -> str:
 
 
 def _is_own_note(state: WatchState, text: str) -> bool:
-    return OWN_NOTE_MARK in text or any(s[:80] in text for s in state.sent if len(s) >= 40)
+    return bool(OWN_NOTE_MARK.search(text)) or any(s[:80] in text for s in state.sent if len(s) >= 40)
 
 
 def read_step(state: WatchState, step: Step, seq: int = 0) -> None:

@@ -26,6 +26,7 @@ def test_a_system_reminder_or_own_note_in_the_user_turn_is_not_a_request():
         s,
         ("message", "user", {"text": "<system-reminder>stuff</system-reminder>"}),
         ("message", "user", {"text": "🧠 Note from this project's memory (past sessions): keep 7"}),
+        ("message", "user", {"text": "🧠 Note #12 from this project's memory (past sessions and commits): keep 7"}),
     )
     assert s.pending is None and s.goal == ""
 
