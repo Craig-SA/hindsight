@@ -13,7 +13,7 @@ last steps, the request it is working on, and the moment waiting to be checked. 
 Each checked moment is ONE reflect call with ``abstain``: the decision model settles most moments
 silently with no LLM call, and a note is written from the memory it picked otherwise. The rules
 around that call are the ones the sde-bench watcher measured (33 tasks x 3 runs, every task solved
-on the first try): never the same memory twice, at most ``MAX_NOTES`` per session, the same
+on the first try): never the same memory twice, at most ``MAX_NOTES`` per request, the same
 situation never judged twice, a heads-up does not use its memory up.
 
 Pure functions over plain data: no I/O, so the same code runs in the append request (reading new
@@ -32,6 +32,9 @@ from pydantic import BaseModel, Field
 
 Trigger = Literal["task", "plan", "command", "edit", "failure"]
 
+# Per user request, not per session: a benchmark session is one task, but a real one runs for days
+# across many requests, and a per-session cap left a session silent for hours after three notes
+# (two of them wrong) — 49 checks an hour skipped as "note limit reached" (beta, 2026-10-22).
 MAX_NOTES = 3
 RECENT_STEPS = 12
 JUDGED_KEYS = 200
@@ -132,6 +135,8 @@ class WatchState(BaseModel):
     conflicts: list[str] = Field(default_factory=list)
     credited: list[int] = Field(default_factory=list)
     dismissed: list[int] = Field(default_factory=list)
+    # Notes sent since the user's latest request: what MAX_NOTES caps.
+    request_notes: int = 0
 
 
 class Step(BaseModel):
@@ -235,6 +240,7 @@ def read_step(state: WatchState, step: Step, seq: int = 0) -> None:
         said = f"the user asked: {_clip(step.text, 200)}"
         trigger, text = "task", step.text
         state.goal = step.text
+        state.request_notes = 0
     elif step.kind == "say":
         said = f"agent said: {_clip(step.text, 300)}"
         if len(step.text) >= 60:
@@ -359,7 +365,7 @@ def moment_key(m: Moment) -> str:
 
 def skip_reason(state: WatchState, m: Moment) -> str | None:
     """Why the moment is not worth a reflect call, or None (and then it is recorded as judged)."""
-    if len(state.sent) >= MAX_NOTES:
+    if state.request_notes >= MAX_NOTES:
         return "note limit reached"
     if not (m.diff if _by_diff(m) else m.text).strip():
         return "nothing to judge"
@@ -388,6 +394,7 @@ def accept_note(state: WatchState, m: Moment, text: str, memory_ids: list[str]) 
     if m.trigger != "task" and any(_overlap(text, c) >= 0.6 for c in state.conflicts):
         return False
     state.sent.append(text.strip())
+    state.request_notes += 1
     if m.trigger != "task":
         state.evidence_sent = list(dict.fromkeys([*state.evidence_sent, *memory_ids]))
         state.conflicts.append(text.strip())

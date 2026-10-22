@@ -99,14 +99,20 @@ def test_take_moment_carries_the_steps_and_change_it_is_judged_against():
     assert W.take_moment(s) is None
 
 
-def test_the_same_situation_is_judged_once_and_notes_stop_at_the_limit():
+def test_the_same_situation_is_judged_once_and_notes_stop_at_the_limit_of_a_request():
     s = W.WatchState()
     m = W.Moment(trigger="plan", text="I will set the retry to 10", recent=[], diff="")
     assert W.skip_reason(s, m) is None
     assert W.skip_reason(s, m) == "already judged"
-    s.sent = ["a", "b", "c"]
+    edit = W.Moment(trigger="edit", text="", recent=[], diff="d")
+    rules = ["Retries stay at 7.", "Never log email addresses.", "Dates are stored in UTC."]
+    for i, rule in enumerate(rules[: W.MAX_NOTES]):
+        assert W.accept_note(s, edit, rule, [f"m{i}"])
     other = W.Moment(trigger="plan", text="something else entirely", recent=[], diff="")
     assert W.skip_reason(s, other) == "note limit reached"
+    # The limit is per request: a new request from the user opens it again.
+    W.read_step(s, W.Step(kind="ask", text="now fix the login page"))
+    assert W.skip_reason(s, other) is None
 
 
 def test_a_memory_is_said_once_but_a_heads_up_does_not_use_it_up():
