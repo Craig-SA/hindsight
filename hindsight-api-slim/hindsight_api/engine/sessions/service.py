@@ -886,7 +886,9 @@ class SessionService:
         self, bank_id: str, session_id: str, memory_ids: list[str], rc: RequestContext
     ) -> bool:
         """Whether every memory the note used comes only from this session's own document (each memory
-        and the memories it was built from). Unknown -> False: the note stands."""
+        and the memories it was built from). Unknown -> False: the note stands. A memory gone by now is
+        skipped: in beta the session's own save rewrote it between the check and this lookup, and the
+        note, quoting only the session itself, went out. At least one memory must still be found."""
         if not memory_ids:
             return False
         try:
@@ -899,17 +901,19 @@ class SessionService:
                 )
             if not own:
                 return False
+            found = False
             for mid in memory_ids:
                 unit = await self._engine.get_memory_unit(bank_id, mid, request_context=rc)
                 if not unit:
-                    return False
+                    continue
+                found = True
                 docs = {unit.get("document_id")} if unit.get("document_id") else set()
                 for sid in unit.get("source_memory_ids") or []:
                     src = await self._engine.get_memory_unit(bank_id, sid, request_context=rc)
                     docs.add((src or {}).get("document_id"))
                 if docs != {own}:
                     return False
-            return True
+            return found
         except Exception as e:  # unknown: the note stands
             logger.warning(f"session own-source check failed for {bank_id}: {e}")
             return False

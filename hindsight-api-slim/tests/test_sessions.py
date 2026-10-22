@@ -174,17 +174,19 @@ async def test_an_event_carrying_a_nul_is_stored_without_it(memory, request_cont
 
 
 @pytest.mark.parametrize(
-    ("sources", "noted"),
+    ("sources", "also_gone", "noted"),
     [
-        (["session:s1"], False),  # only this session's own saved turns: the agent already has them
-        (["session:s1", "chat:past"], True),  # a real past decision restated in this session: kept
+        (["session:s1"], False, False),  # only this session's own saved turns: the agent already has them
+        (["session:s1", "chat:past"], False, True),  # a real past decision restated in this session: kept
+        (["session:s1"], True, False),  # another memory the session's own save just rewrote: still its own
     ],
 )
-async def test_a_note_built_only_from_this_session_is_not_sent(memory, request_context, monkeypatch, sources, noted):
+async def test_a_note_built_only_from_this_session_is_not_sent(
+    memory, request_context, monkeypatch, sources, also_gone, noted
+):
     mem = str(uuid.uuid4())
-    monkeypatch.setattr(
-        memory, "reflect_async", _reflect_stub([("Before you change bar.js: total points.", [mem])], [])
-    )
+    used = [mem, str(uuid.uuid4())] if also_gone else [mem]
+    monkeypatch.setattr(memory, "reflect_async", _reflect_stub([("Before you change bar.js: total points.", used)], []))
     units = {mem: {"document_id": sources[0], "source_memory_ids": [f"src{i}" for i in range(len(sources))]}}
     units.update({f"src{i}": {"document_id": d} for i, d in enumerate(sources)})
 
