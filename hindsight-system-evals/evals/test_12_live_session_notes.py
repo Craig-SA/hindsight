@@ -17,7 +17,8 @@ past session came back as a rule for the project:
 * a decision the request itself just replaced ("ok let's switch to python then") came back as a rule.
 
 **A heads-up for a request that changes nothing** (``expect_note=False``): a question or an estimate,
-and a scheduled job told to follow its own instruction file, each got "Before you change ..." anyway.
+a scheduled job told to follow its own instruction file, and a request that was only an issue link,
+each got "Before you change ..." anyway.
 
 **A real decision the agent must hear** (``expect_note=True``), so that a check that says nothing
 fails: a decided value, a house rule recorded in a commit message, a rule about who bumps versions,
@@ -120,6 +121,24 @@ CASES = (
         criteria=(
             "No note warns the agent about changing the gateway or its rate limit (no 'Before you change ...'): "
             "the request only asks for an estimate and changes nothing." + NO_NOTE_OK
+        ),
+        expect_note=False,
+    ),
+    Case(
+        id="a-request-that-is-only-a-link",
+        history=(
+            Memory(
+                _chat(
+                    ("user", "in the install docs for the Lumen plugin, always pin lumen-plugin@^2.1 and use `lumen add`"),
+                    ("assistant", "Updated docs/plugins/lumen.md: `lumen add`, pinned to ^2.1."),
+                )
+            ),
+        ),
+        request="can you add this to the docs as the reporter asked? https://github.com/acme/app/issues/5842",
+        action=Action("Read", {"file_path": "docs/configuration.md"}, ""),
+        criteria=(
+            "No note tells the agent how to document the Lumen plugin or to pin lumen-plugin: nothing in the "
+            "request says the Lumen docs are involved." + NO_NOTE_OK
         ),
         expect_note=False,
     ),

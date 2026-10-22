@@ -59,7 +59,9 @@ DECISION = (
 
 # A request that changes nothing got "Before you change <x>" anyway in beta (a cost comparison, a
 # watch request, an hourly job whose own file states the rules): 9 of 20 notes the agent called not
-# needed. The conflict question still checks what such a request ends up doing.
+# needed. The conflict question still checks what such a request ends up doing. So it does for a
+# request that is only a link ("add this to the docs <issue url>"): the check cannot open it, and
+# guessed an unrelated docs rule.
 HEADSUP_Q = (
     "Before I start on this request: which project decision recorded in memory (an exact value, a rule, "
     "an exception) about exactly the code this request will change must my fix respect, that the request "
@@ -69,7 +71,8 @@ HEADSUP_Q = (
     "in its final form, not only its summary; each rule a fix could get wrong>', copying "
     "exact literals verbatim, no advice beyond the rules. If memory records no such decision about this "
     "code, reply with nothing. If the request changes nothing (it asks a question, an analysis, a check or "
-    "a status, to watch something, or to run a job by its own instructions), reply with nothing. " + DECISION
+    "a status, to watch something, or to run a job by its own instructions), reply with nothing. If the "
+    "request does not say what it will change (it only links an issue or a page), reply with nothing. " + DECISION
 )
 
 CONFLICT_Q = (
