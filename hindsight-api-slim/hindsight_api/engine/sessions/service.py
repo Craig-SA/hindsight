@@ -76,6 +76,10 @@ MAX_ROUNDS = 4
 # longer reports itself as checking. The operation itself is retried by the worker poller.
 CHECKING_STALE_S = 300
 REFLECT_MAX_TOKENS = 600
+# A turn that runs this many events without ending is saved anyway: in beta an agent working for hours
+# in one turn saved nothing until it ended (and the idle timer never fires while events keep coming),
+# so a crash lost it all and the eventual save was one huge retain. Saves append only what is new.
+SAVE_EVERY_EVENTS = 300
 # How the agent tells the user about a note (the clients ask for these exact lines, naming the note
 # by its seq): one it used, and one it did not need. Read from the assistant messages the client
 # streams in, so every client that asks for the same lines is counted the same way.
@@ -291,7 +295,7 @@ class SessionService:
                 )
                 row = await conn.fetchrow(
                     f"""
-                    SELECT next_seq, acked_seq, settings, metadata, watch_state, checking_since
+                    SELECT next_seq, saved_seq, acked_seq, settings, metadata, watch_state, checking_since
                     FROM {fq_table("sessions")}
                     WHERE bank_id = $1 AND session_id = $2
                     FOR UPDATE
@@ -443,7 +447,8 @@ class SessionService:
         # Only when this append brought something: the moment was queued by the append that made it.
         if rows and settings["live"] and state.pending is not None:
             await self._queue_check(bank_id, session_id, request_context)
-        if turn_ended and settings["retain"] == "turns":
+        long_turn = rows and seq - 1 - int(row["saved_seq"]) >= SAVE_EVERY_EVENTS
+        if settings["retain"] == "turns" and (turn_ended or long_turn):
             await self._queue_save(bank_id, session_id, request_context)
         elif rows and settings["retain"] != "off":
             # At most one idle timer waits per session (dedupe): it covers every append after it.

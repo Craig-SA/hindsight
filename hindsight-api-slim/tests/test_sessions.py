@@ -381,6 +381,28 @@ async def test_a_turn_end_saves_the_turn_into_the_document_once(memory, request_
     assert submitted[1]["operation_id"] != submitted[0]["operation_id"]
 
 
+async def test_a_long_turn_is_saved_without_waiting_for_its_end(memory, request_context, monkeypatch):
+    """A turn that keeps going past SAVE_EVERY_EVENTS events is saved anyway, once per stretch."""
+    from hindsight_api.engine.sessions import service as svc
+
+    monkeypatch.setattr(svc, "SAVE_EVERY_EVENTS", 4)
+    submitted: list[dict] = []
+
+    async def submit_async_retain(bank_id, contents, **kwargs):
+        submitted.append(kwargs)
+        return {"operation_id": kwargs.get("operation_id")}
+
+    monkeypatch.setattr(memory, "submit_async_retain", submit_async_retain)
+    bank, s = _bank(), memory.sessions
+    say = lambda i: {"id": str(i), "role": "assistant", "text": f"step {i}"}  # noqa: E731
+    await s.append(bank, "s1", _req(*(say(i) for i in range(3))), request_context=request_context)
+    assert submitted == []  # 3 events: under the threshold, and no turn end
+    await s.append(bank, "s1", _req(say(3)), request_context=request_context)
+    assert len(submitted) == 1  # 4 unsaved: saved mid-turn
+    await s.append(bank, "s1", _req(say(4)), request_context=request_context)
+    assert len(submitted) == 1  # 1 unsaved since: waits for the next stretch or the turn end
+
+
 async def test_a_save_that_died_after_submitting_resubmits_the_same_operation(memory, request_context, monkeypatch):
     submitted: list[str | None] = []
     fail = [True]

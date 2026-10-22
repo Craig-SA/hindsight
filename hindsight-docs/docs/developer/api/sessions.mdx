@@ -42,7 +42,7 @@ Your client does one thing: after something happens, it sends the new messages.
   things, a file edit, a failure) queues one memory check in the background. Your append never waits
   for it. A check runs one [reflect](./reflect) with `abstain`: most moments end silently, and a note is
   written only when memory records a decision the moment does not state or goes against.
-- **Save.** At the end of a turn, and when the session goes idle, the new turns are appended to the
+- **Save.** At the end of a turn (and every 300 events of a turn that keeps going), and when the session goes idle, the new turns are appended to the
   session's document, and memories are extracted from it like from any [retained](./retain) document.
   There is no "close": a session is idle once it has been quiet for a while (10 minutes by default),
   so a client that finishes and a client that crashes mid-turn end the same way, with nothing lost.
@@ -106,7 +106,7 @@ carry options update what they set.
 | Option | Meaning | Default |
 |---|---|---|
 | `live` | Hindsight follows the session and may send notes back; off, the session is only saved | `false` |
-| `retain` | When the conversation is saved: `turns` (each turn end, and when idle), `idle` (only when idle: one extraction for the whole session), or `off` | `turns` |
+| `retain` | When the conversation is saved: `turns` (each turn end, every 300 events of a turn that keeps going, and when idle), `idle` (only when idle: one extraction for the whole session), or `off` | `turns` |
 | `document_id` | The document it is saved into; fixed once the session exists | `session:<session_id>` |
 | `metadata` | Labels, copied onto the saved document. `harness` names the client (e.g. `claude-code`) and the Control Plane shows its logo | — |
 | `tags`, `context`, `strategy`, `observation_scopes` | Passed to the save's retain, as on [retain](./retain) | the bank's |
