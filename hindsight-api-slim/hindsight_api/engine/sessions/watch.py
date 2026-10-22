@@ -44,6 +44,16 @@ DIFF_CAP = 64_000
 # A moment's weight when several arrive before the watcher is free: the heaviest, latest one wins.
 PRIORITY: dict[str, int] = {"task": 0, "plan": 1, "failure": 2, "command": 3, "edit": 3}
 
+# What counts as a decision, for both questions. In beta the check noted one run's own choice ("no new
+# article this run"), the folder a past session ran a command in, and a past status ("not shipped") as
+# project rules — each time against the request the agent had been given.
+DECISION = (
+    "A decision is a rule meant to hold for the project from then on, made by a person or recorded in a "
+    "commit or a doc. Not a decision: a choice made for one past task or run, which folder, checkout or "
+    "branch past work ran in, something an agent did, or the last known status of some work. Where the "
+    "request or the job's own instructions say to do something, that is not a conflict."
+)
+
 HEADSUP_Q = (
     "Before I start on this request: which project decision recorded in memory (an exact value, a rule, "
     "an exception) about exactly the code this request will change must my fix respect, that the request "
@@ -52,14 +62,14 @@ HEADSUP_Q = (
     "'Before you change <the code>: <every such rule the memory's source text records for this code, "
     "in its final form, not only its summary; each rule a fix could get wrong>', copying "
     "exact literals verbatim, no advice beyond the rules. If memory records no such decision about this "
-    "code, reply with nothing."
+    "code, reply with nothing. " + DECISION
 )
 
 CONFLICT_Q = (
     "Does what I am doing right now (my plan, command or code change) contradict a project decision recorded "
     "in memory, miss one, or repeat an option recorded as rejected? If so, tell me in at most 50 words the "
     "recorded value or rule (exact literals verbatim) and what in my work disagrees. How I run, install or "
-    "check tests is never a conflict. If nothing conflicts, reply with nothing."
+    "check tests is never a conflict. If nothing conflicts, reply with nothing. " + DECISION
 )
 
 # A tool is known by what its name says, not by one agent's names: Claude Code's Edit/Write/Bash,

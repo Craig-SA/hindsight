@@ -199,6 +199,15 @@ on-topic memories without a sign anywhere but the page. Run it with the gate on 
 (`HINDSIGHT_EVAL_SET_MENTAL_MODEL_DELTA_USE_DECISION_MODEL=false`, same decision model);
 the gate is only worth its savings if this stays level.
 
+**`test_12` — a live session's note carries decisions, not one session's context.** A live
+session checks the request and each action against memory and may send the agent a note. In
+real use three kinds of note turned something local to one past session into a project rule:
+one scheduled run's own choice ("no new article this run"), the folder a past session ran a
+command in, and a past status ("not shipped"). Each case seeds that history, then a session
+whose request (and action: writing the file, running the command) legitimately does the thing;
+no note may present the local context as a rule. A control case keeps the other side: a real
+decision ("K means 1024") must still reach the agent.
+
 **`test_08` — ranked retrieval on BEIR.** The only suite graded against labels
 nobody here wrote, and the only one that makes **no model call**. It records a
 *baseline*: what this pipeline scores on a public IR benchmark, and on what.
