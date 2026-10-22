@@ -46,12 +46,15 @@ PRIORITY: dict[str, int] = {"task": 0, "plan": 1, "failure": 2, "command": 3, "e
 
 # What counts as a decision, for both questions. In beta the check noted one run's own choice ("no new
 # article this run"), the folder a past session ran a command in, and a past status ("not shipped") as
-# project rules — each time against the request the agent had been given.
+# project rules — each time against the request the agent had been given. And a user's "ok let's
+# switch to python then" got a conflict quoting the Rust choice it replaced, two minutes earlier.
 DECISION = (
     "A decision is a rule meant to hold for the project from then on, made by a person or recorded in a "
     "commit or a doc. Not a decision: a choice made for one past task or run, which folder, checkout or "
     "branch past work ran in, something an agent did, or the last known status of some work. Where the "
-    "request or the job's own instructions say to do something, that is not a conflict."
+    "request or the job's own instructions say to do something, that is not a conflict. The request is "
+    "the newest decision: where it changes or replaces a recorded one, even in a few words ('switch to "
+    "X'), the recorded one no longer holds."
 )
 
 # A request that changes nothing got "Before you change <x>" anyway in beta (a cost comparison, a

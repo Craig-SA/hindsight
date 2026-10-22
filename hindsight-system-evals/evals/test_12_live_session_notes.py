@@ -13,7 +13,8 @@ past session came back as a rule for the project:
 * a past status ("not shipped yet") became a contradiction with the session shipping it;
 * a remark about where one task's work lived became "work in that repo";
 * the agent's own earlier implementation choice became a rule against the user changing it;
-* the user's previous, similar request came back as a reason the new one was wrong.
+* the user's previous, similar request came back as a reason the new one was wrong;
+* a decision the request itself just replaced ("ok let's switch to python then") came back as a rule.
 
 **A heads-up for a request that changes nothing** (``expect_note=False``): a question or an estimate,
 and a scheduled job told to follow its own instruction file, each got "Before you change ..." anyway.
@@ -80,6 +81,29 @@ def _chat(*turns: tuple[str, str]) -> str:
 NO_NOTE_OK = " No note at all also meets the criteria."
 
 CASES = (
+    Case(
+        id="a-decision-the-request-replaces",
+        history=(
+            Memory(
+                _chat(
+                    ("user", "the report service: write it in Go, one binary, serving SQL over the Parquet files"),
+                    ("assistant", "Decided: a Go report service, a single binary, SQL over Parquet."),
+                ),
+                at="2026-04-01T09:00:00Z",
+            ),
+        ),
+        request="would python be simpler here? reads are rare. ok let's switch to python then",
+        action=Action(
+            "Bash",
+            {"command": "git rm -rq report/go.mod report/main.go && mkdir -p report/src && touch report/pyproject.toml"},
+            "+++ b/report/pyproject.toml\n+[project]\n+name = \"report\"",
+        ),
+        criteria=(
+            "No note says replacing the Go service with Python breaks a rule or contradicts the recorded "
+            "decision: the request itself replaced that decision." + NO_NOTE_OK
+        ),
+        expect_note=False,
+    ),
     # ---------------------------------------------------------------- a request that changes nothing
     Case(
         id="a-question-only",
