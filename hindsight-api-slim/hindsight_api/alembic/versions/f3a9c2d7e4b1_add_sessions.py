@@ -23,7 +23,7 @@ turn, close). Keeping them apart is what lets the session choose when to pay for
 after a lost response inserts nothing twice. ``seq`` is the server's order.
 
 Revision ID: f3a9c2d7e4b1
-Revises: e8c1a4f7b2d9
+Revises: c7e2f9a4d1b8
 Create Date: 2026-10-19
 """
 
@@ -34,7 +34,7 @@ from alembic import context, op
 from hindsight_api.alembic._dialect import run_for_dialect
 
 revision: str = "f3a9c2d7e4b1"
-down_revision: str | Sequence[str] | None = "e8c1a4f7b2d9"
+down_revision: str | Sequence[str] | None = "c7e2f9a4d1b8"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

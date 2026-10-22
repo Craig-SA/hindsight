@@ -166,7 +166,9 @@ async def run(args: argparse.Namespace) -> list[Outcome]:
                 question = DecisionQuestion(
                     type="choice", instructions=m.query + VERDICT_SUFFIX, criteria=dict(VERDICT_OPTIONS)
                 )
-                answer = (await asker.ask(m.state(), {"verdict": question})).answers["verdict"]
+                answer = (
+                    await asker.ask(m.state(), {"verdict": question}, scope="decision_abstain_benchmark")
+                ).answers["verdict"]
                 probs = answer.probabilities
                 speak = sum(p for k, p in probs.items() if k in VERDICT_SPEAK)
                 route = route_verdict(speak, args.write_at, args.check_at)

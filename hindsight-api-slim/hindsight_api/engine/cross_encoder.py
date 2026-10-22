@@ -1558,7 +1558,8 @@ class TypeSafeCrossEncoder(CrossEncoderModel):
                 "state": state,
                 "model": self.model,
                 "questions": {"pick": {"type": "choice", "instructions": instructions, "criteria": criteria}},
-            }
+            },
+            "decision_pick",
         )
         probabilities = {k: float(v) for k, v in (result["answers"]["pick"].get("probabilities") or {}).items()}
         return EvidencePick(
