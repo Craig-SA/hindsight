@@ -176,7 +176,7 @@ def test_the_situation_speaks_as_the_agent_and_lists_what_it_was_told():
     text = W.situation("Fix it", m, ["keep 7"])
     assert text.startswith("MY REQUEST:\nFix it")
     assert "WHAT I JUST DID (command):\nrm -rf build" in text
-    assert "MY CODE CHANGE SO FAR:\n+x" in text
+    assert "+x" not in text  # a command is judged on its own; each edit was judged by its diff
     assert text.endswith("ALREADY TOLD ME:\nkeep 7")
 
 

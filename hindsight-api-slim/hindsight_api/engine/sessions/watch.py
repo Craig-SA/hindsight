@@ -415,8 +415,10 @@ def situation(goal: str, m: Moment, sent: list[str], set_aside: list[str] | None
         parts.append(f"WHAT I JUST DID ({m.trigger}):\n{doing}")
         if m.recent:
             parts.append("MY RECENT STEPS:\n" + "\n".join(m.recent[-8:]))
-        if m.trigger != "edit" and m.diff.strip():
-            parts.append(f"MY CODE CHANGE SO FAR:\n{_clip_diff(m.diff, 4000)}")
+        # The change so far is not shown for a command or a plan: each edit is judged by its own diff
+        # when it is made. Shown, every later command re-judged it, and one session got the same rule
+        # about one edited file, reworded, on 48 commands in an hour (beta); the repeat guard held them
+        # all back, but each cost an answer call.
     if request_file:
         parts.append("THE FILE MY REQUEST POINTS TO (its rules are part of my request):\n" + request_file)
     if sent:
