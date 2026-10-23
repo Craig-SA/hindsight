@@ -81,6 +81,8 @@ PRIORITY: dict[str, int] = {"task": 0, "plan": 1, "failure": 2, "command": 3, "e
 # conflict about app signing, because the request was about a permission loop: the step, not the
 # request, is what a conflict check judges. And "fully support the questions in the chat" got a conflict quoting the
 # old "questions go to the terminal" rule it asked to change: a request replaces a rule without naming it.
+# Three conflicts applied a rule to the wrong one of two similar parts: a rerank fallback rule to the
+# decision model, a consolidation queue limit to the decision model, a memory-scan rule to a document read.
 DECISION = (
     "A decision is a rule meant to hold for the project from then on, made by a person or recorded in a "
     "commit or a doc. Not a decision: a choice made for one past task or run, which folder, checkout or "
@@ -115,7 +117,9 @@ CONFLICT_Q = (
     "in memory, miss one, or repeat an option recorded as rejected? If so, tell me in at most 50 words the "
     "recorded value or rule (exact literals verbatim) and what in my work disagrees. How I run, install or "
     "check tests is never a conflict. Judge only the code or files this step changes: a rule about other "
-    "code is not a conflict here, even when my request is about it. If nothing conflicts, reply with "
+    "code is not a conflict here, even when my request is about it. A rule about one component (a "
+    "service, a model, a scan, a queue) is not a rule for a similar one with a shared name. If nothing "
+    "conflicts, reply with "
     "nothing. " + DECISION
 )
 

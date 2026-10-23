@@ -19,6 +19,7 @@ past session came back as a rule for the project:
 * a rule about the code the request is about was raised as a conflict against an edit to other code.
 * a request asked for the very behaviour an earlier rule ruled out, without naming it, and got the rule back.
 * a scheduled job was told its own instruction file's rule, ignoring the exception that same file makes.
+* a rule about one component was applied to a similar component that shares its words.
 
 **A heads-up for a request that changes nothing** (``expect_note=False``): a question or an estimate,
 a scheduled job told to follow its own instruction file, and a request that was only an issue link,
@@ -88,6 +89,27 @@ def _chat(*turns: tuple[str, str]) -> str:
 NO_NOTE_OK = " No note at all also meets the criteria."
 
 CASES = (
+    Case(
+        id="a-rule-for-a-similar-component",
+        history=(
+            Memory(
+                "commit 9a2f1c: search: the result ranker falls back to the backup model on errors, so a failing "
+                "ranker never empties the results page.",
+                at="2026-03-12T09:00:00Z",
+            ),
+        ),
+        request="The spam classifier should have no fallback model: if it fails, mark the message 'unchecked'.",
+        action=Action(
+            "Edit",
+            {"file_path": "mail/spam_classifier.py"},
+            "+++ b/mail/spam_classifier.py\n-    return backup_model.classify(msg)\n+    return Verdict.UNCHECKED",
+        ),
+        criteria=(
+            "No note says removing the classifier's fallback goes against the ranker's fallback rule or tells the "
+            "agent to keep a fallback model: the rule is about the search ranker, a different component." + NO_NOTE_OK
+        ),
+        expect_note=False,
+    ),
     Case(
         id="the-jobs-own-file-makes-an-exception",
         history=(
