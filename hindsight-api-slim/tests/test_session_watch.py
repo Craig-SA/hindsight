@@ -326,3 +326,17 @@ def test_a_heads_up_about_code_the_request_never_mentions_is_dropped():
         "Before you change `bank-catalog-size`: hold off.", "so we skipped the bank cataglog size thing"
     )
     assert not W.headsup_names_other_code("You set 10; the rule is 7.", "anything")
+
+
+def test_a_sessions_commands_are_checked_at_most_once_a_minute():
+    from datetime import UTC, datetime, timedelta
+
+    from hindsight_api.engine.sessions.service import _next_command_check
+
+    now = datetime(2026, 10, 23, 12, 0, tzinfo=UTC)
+    s = W.WatchState()
+    assert _next_command_check(s, now) is None  # never checked one: now
+    s.last_command_check = (now - timedelta(seconds=20)).isoformat()
+    assert _next_command_check(s, now) == now + timedelta(seconds=W.COMMAND_CHECK_EVERY_S - 20)
+    s.last_command_check = (now - timedelta(seconds=W.COMMAND_CHECK_EVERY_S + 1)).isoformat()
+    assert _next_command_check(s, now) is None

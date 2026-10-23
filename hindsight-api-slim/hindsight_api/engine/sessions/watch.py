@@ -51,6 +51,11 @@ SET_ASIDE_KEPT = 20
 # what that file makes an exception to, because the check saw only "Read JOB.md and do what it says".
 REQUEST_FILE = re.compile(r"[\w./~-]+\.(?:md|txt|ya?ml|json|toml)\b")
 REQUEST_FILE_CAP = 4000
+# A session's commands and plans are checked at most this often; the latest one waits for the next
+# turn (heaviest, then latest, wins the pending slot). In beta command checks were ~85% of all checks,
+# 6 of 35 command notes changed the work and 25 were irrelevant or wrong, and on a laptop their
+# reranks queued behind each other into timeouts. Edits, failures and requests are not held back.
+COMMAND_CHECK_EVERY_S = 60
 # Words in a heads-up's "Before you change <X>" that name no code of their own.
 _GENERIC_TARGET_WORDS = frozenset(
     "code handling change changes rule rules workflow workflows documentation installation deployment "
@@ -182,6 +187,8 @@ class WatchState(BaseModel):
     # The file the request points to, as the agent read it ("Read JOB.md and do what it says"): a
     # scheduled job's request is one line, so its rules, and the exceptions they make, live there.
     request_file: str = ""
+    # When this session's last command or plan was checked (database time, ISO): see COMMAND_CHECK_EVERY_S.
+    last_command_check: str = ""
 
 
 class Step(BaseModel):

@@ -201,6 +201,14 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _next_command_check(state: W.WatchState, now: datetime) -> datetime | None:
+    """When this session may check its next command or plan, or None when it may now."""
+    if not state.last_command_check:
+        return None
+    at = datetime.fromisoformat(state.last_command_check) + timedelta(seconds=W.COMMAND_CHECK_EVERY_S)
+    return at if at > now else None
+
+
 def _checking(state: W.WatchState, checking_since: datetime | None) -> bool:
     if state.pending is not None:
         return True
@@ -706,12 +714,16 @@ class SessionService:
                         return
                     state = W.WatchState.model_validate(conn.parse_json(row["watch_state"]) or {})
                     settle = self._settle_at(row)
+                    if state.pending is not None and state.pending.trigger in ("command", "plan"):
+                        settle = max(filter(None, [settle, _next_command_check(state, row["db_now"])]), default=None)
                     if state.pending is not None and settle is not None and self._engine._task_backend.can_defer:
                         # Not yet: back in the queue until the session settles. A deferral is not a
                         # failed attempt, and appends meanwhile fold into this same operation.
                         raise DeferOperation(exec_date=settle, reason="waiting for the session to settle")
                     moment = W.take_moment(state)
                     skip = W.skip_reason(state, moment) if moment else None
+                    if moment and not skip and moment.trigger in ("command", "plan"):
+                        state.last_command_check = row["db_now"].isoformat()
                     await conn.execute(
                         f"""
                         UPDATE {fq_table("sessions")}
