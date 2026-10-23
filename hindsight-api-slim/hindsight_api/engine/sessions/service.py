@@ -403,11 +403,11 @@ class SessionService:
                 credits = dismissed = 0
                 if cited or said_unneeded:
                     # Only this session's notes count, each once however often the agent names it.
-                    notes_here = {
-                        int(r["seq"])
+                    note_text = {
+                        int(r["seq"]): str(r["text"] or "")
                         for r in await conn.fetch(
                             f"""
-                            SELECT seq FROM {fq_table("session_events")}
+                            SELECT seq, payload->>'text' AS text FROM {fq_table("session_events")}
                             WHERE bank_id = $1 AND session_id = $2 AND kind = 'note' AND seq = ANY($3)
                             """,
                             bank_id,
@@ -415,6 +415,7 @@ class SessionService:
                             list(cited | said_unneeded),
                         )
                     }
+                    notes_here = set(note_text)
                     # Used wins: in beta an agent first called a note not needed, then worked by it
                     # and credited it. A note once used is never counted as not needed.
                     new_credits = sorted((cited & notes_here) - set(state.credited))
@@ -423,6 +424,10 @@ class SessionService:
                     state.dismissed = [n for n in state.dismissed if n not in new_credits]
                     new_dismissed = sorted((said_unneeded & notes_here) - set(state.dismissed) - set(state.credited))
                     state.dismissed += new_dismissed
+                    state.set_aside = [t for t in state.set_aside if t not in {note_text[n] for n in new_credits}]
+                    state.set_aside = (state.set_aside + [note_text[n] for n in new_dismissed if note_text[n]])[
+                        -W.SET_ASIDE_KEPT :
+                    ]
                     credits, dismissed = len(new_credits), len(new_dismissed) - len(unused_then_used)
                 if rows:
                     await conn.bulk_insert_from_arrays(
@@ -730,7 +735,9 @@ class SessionService:
                 return
             if skip:
                 continue
-            await self._check(bank_id, session_id, moment, state.goal or moment.text, list(state.sent), rc)
+            await self._check(
+                bank_id, session_id, moment, state.goal or moment.text, list(state.sent), list(state.set_aside), rc
+            )
 
     @staticmethod
     def _settle_at(row: Any) -> datetime | None:
@@ -750,11 +757,18 @@ class SessionService:
         return CheckLog(trigger=m.trigger, moment_seq=m.seq, moment=m.text[:2000], **extra)
 
     async def _check(
-        self, bank_id: str, session_id: str, m: W.Moment, goal: str, sent: list[str], rc: RequestContext
+        self,
+        bank_id: str,
+        session_id: str,
+        m: W.Moment,
+        goal: str,
+        sent: list[str],
+        set_aside: list[str],
+        rc: RequestContext,
     ) -> None:
         from ..memory_engine import Budget
 
-        context = W.situation(goal, m, sent)
+        context = W.situation(goal, m, sent, set_aside)
         queries = W.search_queries(m)
         t0 = time.monotonic()
         error = None

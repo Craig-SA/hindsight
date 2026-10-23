@@ -43,6 +43,10 @@ _WORK_WORD = re.compile(r"[^\W_][\w'-]*")
 # reflect's own 0.9: in beta every irrelevant heads-up scored 0.5-0.89, every one that changed the
 # agent's work 0.41 or less. Conflict checks keep reflect's bar: there the two overlapped.
 HEADSUP_ABSTAIN_AT = 0.5
+# A note sharing this much of its words with one the agent set aside says the same rule again. Lower
+# than the repeat guard's 0.6: the beta rewordings of a set-aside rule measured 0.4-0.55.
+SET_ASIDE_OVERLAP = 0.4
+SET_ASIDE_KEPT = 20
 # Per user request, not per session: a benchmark session is one task, but a real one runs for days
 # across many requests, and a per-session cap left a session silent for hours after three notes
 # (two of them wrong) — 49 checks an hour skipped as "note limit reached" (beta, 2026-10-22).
@@ -63,7 +67,9 @@ PRIORITY: dict[str, int] = {"task": 0, "plan": 1, "failure": 2, "command": 3, "e
 # project rules — each time against the request the agent had been given. And a user's "ok let's
 # switch to python then" got a conflict quoting the Rust choice it replaced, two minutes earlier.
 # An agent's own suggestion ("the real fix is to sign it with a certificate") came back as the rule
-# against the approach the user chose instead.
+# against the approach the user chose instead. And a command that only edited button labels got a
+# conflict about app signing, because the request was about a permission loop: the step, not the
+# request, is what a conflict check judges.
 DECISION = (
     "A decision is a rule meant to hold for the project from then on, made by a person or recorded in a "
     "commit or a doc. Not a decision: a choice made for one past task or run, which folder, checkout or "
@@ -96,7 +102,9 @@ CONFLICT_Q = (
     "Does what I am doing right now (my plan, command or code change) contradict a project decision recorded "
     "in memory, miss one, or repeat an option recorded as rejected? If so, tell me in at most 50 words the "
     "recorded value or rule (exact literals verbatim) and what in my work disagrees. How I run, install or "
-    "check tests is never a conflict. If nothing conflicts, reply with nothing. " + DECISION
+    "check tests is never a conflict. Judge only the code or files this step changes: a rule about other "
+    "code is not a conflict here, even when my request is about it. If nothing conflicts, reply with "
+    "nothing. " + DECISION
 )
 
 # A tool is known by what its name says, not by one agent's names: Claude Code's Edit/Write/Bash,
@@ -151,6 +159,10 @@ class WatchState(BaseModel):
     dismissed: list[int] = Field(default_factory=list)
     # Notes sent since the user's latest request: what MAX_NOTES caps.
     request_notes: int = 0
+    # The notes the agent set aside (their text): the check is told not to raise them again, and a
+    # note mostly saying the same is dropped. In beta one rule the agent had set aside twice ("only my
+    # suggestion") came back a third time, reworded each time past the repeat guard.
+    set_aside: list[str] = Field(default_factory=list)
 
 
 class Step(BaseModel):
@@ -354,7 +366,7 @@ def _by_diff(m: Moment) -> bool:
     return m.trigger == "edit" and bool(m.diff.strip())
 
 
-def situation(goal: str, m: Moment, sent: list[str]) -> str:
+def situation(goal: str, m: Moment, sent: list[str], set_aside: list[str] | None = None) -> str:
     """The moment as reflect's context: what the question is about, in the agent's own voice."""
     parts = [f"MY REQUEST:\n{goal[:3000]}"]
     if m.trigger != "task":
@@ -366,6 +378,8 @@ def situation(goal: str, m: Moment, sent: list[str]) -> str:
             parts.append(f"MY CODE CHANGE SO FAR:\n{_clip_diff(m.diff, 4000)}")
     if sent:
         parts.append("ALREADY TOLD ME:\n" + "\n".join(sent))
+    if set_aside:
+        parts.append("I SET THESE ASIDE OR ALREADY DID THEM (never raise them again):\n" + "\n".join(set_aside))
     return "\n\n".join(parts)
 
 
@@ -408,6 +422,8 @@ def accept_note(state: WatchState, m: Moment, text: str, memory_ids: list[str]) 
     # shorter note's words: repeats measured 0.6-0.92, a different rule at most 0.45. A heads-up is
     # not compared: going against it later is worth saying.
     if m.trigger != "task" and any(_overlap(text, c) >= 0.6 for c in state.conflicts):
+        return False
+    if any(_overlap(text, s) >= SET_ASIDE_OVERLAP for s in state.set_aside):
         return False
     state.sent.append(text.strip())
     state.request_notes += 1

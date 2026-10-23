@@ -284,3 +284,17 @@ def test_a_saved_reply_leaves_out_the_lines_about_notes():
         "message", {"role": "assistant", "text": "> 🧠 *Hindsight thought #9, already done* — x"}, datetime.now(UTC)
     )
     assert only is None
+
+
+def test_a_rule_the_agent_set_aside_is_not_raised_again_and_the_check_is_told():
+    """Beta: one rule set aside twice ("only my suggestion") came back a third time, reworded."""
+    s = W.WatchState(
+        set_aside=["The recorded rule is: the real fix is to sign the app with a fixed certificate of its own."]
+    )
+    edit = W.Moment(trigger="edit", text="", recent=[], diff="d")
+    again = "This misses the recorded fix: sign the app with a fixed certificate of its own."
+    other = "Retries stay at 7 for the upload client."
+    assert not W.accept_note(s, edit, again, ["m1"])
+    assert W.accept_note(s, edit, other, ["m2"])
+    ctx = W.situation("fix it", edit, [], s.set_aside)
+    assert "I SET THESE ASIDE OR ALREADY DID THEM (never raise them again):\nThe recorded rule is" in ctx

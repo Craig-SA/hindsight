@@ -54,6 +54,15 @@ def _req(*steps: dict, ack: int | None = None, **session) -> SessionAppendReques
     )
 
 
+async def _watch_state(memory, bank: str, session: str) -> dict:
+    backend = await memory._get_backend()
+    async with backend.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT watch_state FROM sessions WHERE bank_id = $1 AND session_id = $2", bank, session
+        )
+    return conn.parse_json(row["watch_state"]) if hasattr(conn, "parse_json") else json.loads(row["watch_state"])
+
+
 def _reflect_stub(answers: list[tuple[str, list[str]]], calls: list[dict]):
     """reflect_async that answers in order; each answer is (text, memory ids)."""
 
@@ -197,6 +206,11 @@ async def test_thought_lines_are_counted_like_note_lines(memory, request_context
     await s.append(bank, "s1", _req({"id": "a", "role": "assistant", "text": reply}), request_context=request_context)
     summary = await s.get(bank, "s1", request_context=request_context)
     assert (summary.credit_count, summary.dismissed_count) == (1, 1)
+    # The note it set aside is kept so later checks are told not to raise it again.
+    from hindsight_api.engine.sessions.watch import WatchState
+
+    state = WatchState.model_validate(await _watch_state(memory, bank, "s1"))
+    assert state.set_aside == ["Email is never masked."]
 
 
 async def test_an_event_carrying_a_nul_is_stored_without_it(memory, request_context):

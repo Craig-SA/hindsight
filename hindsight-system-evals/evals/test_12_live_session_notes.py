@@ -16,6 +16,7 @@ past session came back as a rule for the project:
 * the user's previous, similar request came back as a reason the new one was wrong;
 * a decision the request itself just replaced ("ok let's switch to python then") came back as a rule.
 * the assistant's own suggestion, which the user turned down, came back as a rule.
+* a rule about the code the request is about was raised as a conflict against an edit to other code.
 
 **A heads-up for a request that changes nothing** (``expect_note=False``): a question or an estimate,
 a scheduled job told to follow its own instruction file, and a request that was only an issue link,
@@ -83,6 +84,28 @@ def _chat(*turns: tuple[str, str]) -> str:
 NO_NOTE_OK = " No note at all also meets the criteria."
 
 CASES = (
+    Case(
+        id="a-rule-about-other-code",
+        history=(
+            Memory(
+                "commit 4e1c2a: auth: refresh the session token 5 minutes before it expires, never on a 401 "
+                "retry; decided after the login loop of March.",
+                at="2026-03-20T09:00:00Z",
+            ),
+        ),
+        request="the app is stuck in a login loop again, look into it. Also the Save button says 'Save file', make it 'Save'.",
+        action=Action(
+            "Edit",
+            {"file_path": "ui/toolbar.html"},
+            '+++ b/ui/toolbar.html\n-<button id="save">Save file</button>\n+<button id="save">Save</button>',
+        ),
+        criteria=(
+            "No note says this edit conflicts with the token refresh rule or tells the agent to change token "
+            "refresh: the edit only changes a button label. A note that only mentions the rule as background "
+            "for the login loop, without calling the label edit a conflict, is acceptable." + NO_NOTE_OK
+        ),
+        expect_note=False,
+    ),
     Case(
         id="an-agents-suggestion",
         history=(
