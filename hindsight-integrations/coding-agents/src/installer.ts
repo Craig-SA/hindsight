@@ -228,6 +228,12 @@ const cmdHook = (dist: string, file: string, timeout: number) => ({
   hooks: [{ type: "command", command: `node "${join(dist, file)}"`, timeout }],
 });
 
+/** The command STRING for a host that runs `node <script>`. The path is quoted only when it needs
+ *  to be: Antigravity CLI runs these without a shell on Windows, so the quotes reach node as part
+ *  of the path, it reads `"C:\…"` as relative and fails with MODULE_NOT_FOUND (#5913). */
+export const nodeCommand = (script: string): string =>
+  script.includes(" ") ? `node "${script}"` : `node ${script}`;
+
 /** ZCode's registration shape: the same matcher group, but an argv rather than a command STRING —
  *  it spawns hooks without a shell, so `node "…/zcode-hook.js"` would be looked up as one
  *  executable name and never run — and a `timeoutMs` budget rather than `timeout` seconds. */
@@ -282,7 +288,7 @@ function mergeHarnessHooks(
         : spec.configStyle === "process"
           ? processHook(dist, hook.entry, hook.timeout!)
           : {
-              command: `node "${join(dist, hook.entry)}"`,
+              command: nodeCommand(join(dist, hook.entry)),
               ...(hook.timeout ? { timeout: hook.timeout } : {}),
             };
     hooks[hook.event] = mergeHookEvent(hooks[hook.event], entry);
@@ -750,14 +756,14 @@ const antigravity: HarnessInstaller = {
     if (!settings.statusLine) {
       settings.statusLine = {
         type: "command",
-        command: `node "${join(c.dist, "antigravity-statusline.js")}"`,
+        command: nodeCommand(join(c.dist, "antigravity-statusline.js")),
       };
       writeJson(settingsPath, settings);
       c.log?.(`antigravity-cli: Hindsight status line enabled in ${settingsPath}`);
     } else if (JSON.stringify(settings.statusLine).includes(MARKER)) {
       settings.statusLine = {
         type: "command",
-        command: `node "${join(c.dist, "antigravity-statusline.js")}"`,
+        command: nodeCommand(join(c.dist, "antigravity-statusline.js")),
       };
       writeJson(settingsPath, settings);
     } else {
