@@ -62,10 +62,13 @@ PRIORITY: dict[str, int] = {"task": 0, "plan": 1, "failure": 2, "command": 3, "e
 # article this run"), the folder a past session ran a command in, and a past status ("not shipped") as
 # project rules — each time against the request the agent had been given. And a user's "ok let's
 # switch to python then" got a conflict quoting the Rust choice it replaced, two minutes earlier.
+# An agent's own suggestion ("the real fix is to sign it with a certificate") came back as the rule
+# against the approach the user chose instead.
 DECISION = (
     "A decision is a rule meant to hold for the project from then on, made by a person or recorded in a "
     "commit or a doc. Not a decision: a choice made for one past task or run, which folder, checkout or "
-    "branch past work ran in, something an agent did, or the last known status of some work. Where the "
+    "branch past work ran in, something an agent did or suggested, or the last known status of some work. "
+    "Where the "
     "request or the job's own instructions say to do something, that is not a conflict. The request is "
     "the newest decision: where it changes or replaces a recorded one, even in a few words ('switch to "
     "X'), the recorded one no longer holds."
