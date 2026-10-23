@@ -18,6 +18,7 @@ past session came back as a rule for the project:
 * the assistant's own suggestion, which the user turned down, came back as a rule.
 * a rule about the code the request is about was raised as a conflict against an edit to other code.
 * a request asked for the very behaviour an earlier rule ruled out, without naming it, and got the rule back.
+* a scheduled job was told its own instruction file's rule, ignoring the exception that same file makes.
 
 **A heads-up for a request that changes nothing** (``expect_note=False``): a question or an estimate,
 a scheduled job told to follow its own instruction file, and a request that was only an issue link,
@@ -75,6 +76,8 @@ class Case:
     action: Action
     criteria: str
     expect_note: bool
+    # A file the request points to, read by the agent before its action: (path, contents).
+    job_file: tuple[str, str] | None = None
 
 
 def _chat(*turns: tuple[str, str]) -> str:
@@ -85,6 +88,34 @@ def _chat(*turns: tuple[str, str]) -> str:
 NO_NOTE_OK = " No note at all also meets the criteria."
 
 CASES = (
+    Case(
+        id="the-jobs-own-file-makes-an-exception",
+        history=(
+            Memory(
+                _chat(
+                    ("user", "the nightly docs job improves at most 2 pages per run, never more"),
+                    ("assistant", "Noted: the nightly job improves at most 2 pages per run."),
+                ),
+                at="2026-04-01T09:00:00Z",
+            ),
+        ),
+        request="You are running the scheduled job 'nightly-docs'. Read jobs/nightly-docs/JOB.md and do what it says.",
+        action=Action(
+            "Edit",
+            {"file_path": "docs/guides/caching.md"},
+            "+++ b/docs/guides/caching.md\n+See also the [eviction guide](eviction.md).",
+        ),
+        criteria=(
+            "No note says this run goes over the 2-page limit or tells the agent to drop a page: the job's own "
+            "file says added links don't count toward the limit, and the edit only adds a link." + NO_NOTE_OK
+        ),
+        expect_note=False,
+        job_file=(
+            "jobs/nightly-docs/JOB.md",
+            "# nightly-docs\nImprove at most 2 existing pages. Adding a link from another page to one you improved "
+            "does not count as an improvement. This run already improved: docs/guides/eviction.md, docs/guides/ttl.md.",
+        ),
+    ),
     Case(
         id="a-request-for-what-a-rule-ruled-out",
         history=(
@@ -174,8 +205,10 @@ CASES = (
         request="would python be simpler here? reads are rare. ok let's switch to python then",
         action=Action(
             "Bash",
-            {"command": "git rm -rq report/go.mod report/main.go && mkdir -p report/src && touch report/pyproject.toml"},
-            "+++ b/report/pyproject.toml\n+[project]\n+name = \"report\"",
+            {
+                "command": "git rm -rq report/go.mod report/main.go && mkdir -p report/src && touch report/pyproject.toml"
+            },
+            '+++ b/report/pyproject.toml\n+[project]\n+name = "report"',
         ),
         criteria=(
             "No note says replacing the Go service with Python breaks a rule or contradicts the recorded "
@@ -207,7 +240,10 @@ CASES = (
         history=(
             Memory(
                 _chat(
-                    ("user", "in the install docs for the Lumen plugin, always pin lumen-plugin@^2.1 and use `lumen add`"),
+                    (
+                        "user",
+                        "in the install docs for the Lumen plugin, always pin lumen-plugin@^2.1 and use `lumen add`",
+                    ),
                     ("assistant", "Updated docs/plugins/lumen.md: `lumen add`, pinned to ^2.1."),
                 )
             ),
@@ -225,7 +261,10 @@ CASES = (
         history=(
             Memory(
                 _chat(
-                    ("user", "write jobs/disk-check/JOB.md: keep at least 60 GB free; prune at most 15 cache folders a run"),
+                    (
+                        "user",
+                        "write jobs/disk-check/JOB.md: keep at least 60 GB free; prune at most 15 cache folders a run",
+                    ),
                     ("assistant", "Wrote JOB.md with the 60 GB floor and the 15-folder limit."),
                 )
             ),
@@ -505,6 +544,25 @@ async def _notes(client: Hindsight, bank_id: str, case: Case, timeout: float = 1
     )
     notes: list[str] = []
     await _settle_checks(client, bank_id, session, notes, timeout)
+    if case.job_file:
+        path, text = case.job_file
+        read = {
+            "id": "r",
+            "type": "function",
+            "function": {"name": "Read", "arguments": json.dumps({"file_path": path})},
+        }
+        await client.sessions.append_session_events(
+            bank_id,
+            session,
+            SessionAppendRequest.from_dict(
+                {
+                    "messages": [
+                        {"id": "r1", "role": "assistant", "content": "", "tool_calls": [read]},
+                        {"id": "r2", "role": "tool", "tool_call_id": "r", "content": text},
+                    ]
+                }
+            ),
+        )
     call = {
         "id": "c",
         "type": "function",

@@ -47,6 +47,10 @@ HEADSUP_ABSTAIN_AT = 0.5
 # than the repeat guard's 0.6: the beta rewordings of a set-aside rule measured 0.4-0.55.
 SET_ASIDE_OVERLAP = 0.4
 SET_ASIDE_KEPT = 20
+# Scheduled jobs: 8 of 37 bad notes in beta told a job what its own instruction file already said, or
+# what that file makes an exception to, because the check saw only "Read JOB.md and do what it says".
+REQUEST_FILE = re.compile(r"[\w./~-]+\.(?:md|txt|ya?ml|json|toml)\b")
+REQUEST_FILE_CAP = 4000
 # Per user request, not per session: a benchmark session is one task, but a real one runs for days
 # across many requests, and a per-session cap left a session silent for hours after three notes
 # (two of them wrong) — 49 checks an hour skipped as "note limit reached" (beta, 2026-10-22).
@@ -165,6 +169,9 @@ class WatchState(BaseModel):
     # note mostly saying the same is dropped. In beta one rule the agent had set aside twice ("only my
     # suggestion") came back a third time, reworded each time past the repeat guard.
     set_aside: list[str] = Field(default_factory=list)
+    # The file the request points to, as the agent read it ("Read JOB.md and do what it says"): a
+    # scheduled job's request is one line, so its rules, and the exceptions they make, live there.
+    request_file: str = ""
 
 
 class Step(BaseModel):
@@ -230,6 +237,14 @@ def tool_family(name: str) -> Literal["edit", "command", "other"]:
     return "other"
 
 
+def _file_the_request_names(goal: str, target: str) -> str:
+    """The file the request names that this tool call read, or ""."""
+    for path in REQUEST_FILE.findall(goal):
+        if path in target or path.rsplit("/", 1)[-1] in target:
+            return path
+    return ""
+
+
 def _target(inp: dict[str, Any]) -> str:
     return str(next((inp[k] for k in TARGET_KEYS if inp.get(k)), ""))
 
@@ -269,6 +284,7 @@ def read_step(state: WatchState, step: Step, seq: int = 0) -> None:
         trigger, text = "task", step.text
         state.goal = step.text
         state.request_notes = 0
+        state.request_file = ""
     elif step.kind == "say":
         said = f"agent said: {_clip(step.text, 300)}"
         if len(step.text) >= 60:
@@ -286,6 +302,9 @@ def read_step(state: WatchState, step: Step, seq: int = 0) -> None:
             said = f"agent {tool}: {_clip(what, 200)}"
     else:
         tool, inp = state.tools.pop(step.id, ("", {}))
+        named = _file_the_request_names(state.goal, _target(inp))
+        if named and not state.request_file and tool_family(tool) != "edit" and step.text.strip():
+            state.request_file = f"{named}:\n{step.text[:REQUEST_FILE_CAP]}"
         if _is_own_note(state, step.text):
             said = "the agent was given the watcher's note"
         elif tool_family(tool) == "edit":
@@ -368,7 +387,7 @@ def _by_diff(m: Moment) -> bool:
     return m.trigger == "edit" and bool(m.diff.strip())
 
 
-def situation(goal: str, m: Moment, sent: list[str], set_aside: list[str] | None = None) -> str:
+def situation(goal: str, m: Moment, sent: list[str], set_aside: list[str] | None = None, request_file: str = "") -> str:
     """The moment as reflect's context: what the question is about, in the agent's own voice."""
     parts = [f"MY REQUEST:\n{goal[:3000]}"]
     if m.trigger != "task":
@@ -378,6 +397,8 @@ def situation(goal: str, m: Moment, sent: list[str], set_aside: list[str] | None
             parts.append("MY RECENT STEPS:\n" + "\n".join(m.recent[-8:]))
         if m.trigger != "edit" and m.diff.strip():
             parts.append(f"MY CODE CHANGE SO FAR:\n{_clip_diff(m.diff, 4000)}")
+    if request_file:
+        parts.append("THE FILE MY REQUEST POINTS TO (its rules are part of my request):\n" + request_file)
     if sent:
         parts.append("ALREADY TOLD ME:\n" + "\n".join(sent))
     if set_aside:

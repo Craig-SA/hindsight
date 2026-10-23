@@ -298,3 +298,18 @@ def test_a_rule_the_agent_set_aside_is_not_raised_again_and_the_check_is_told():
     assert W.accept_note(s, edit, other, ["m2"])
     ctx = W.situation("fix it", edit, [], s.set_aside)
     assert "I SET THESE ASIDE OR ALREADY DID THEM (never raise them again):\nThe recorded rule is" in ctx
+
+
+def test_the_file_a_request_points_to_becomes_part_of_the_request():
+    """A scheduled job's request is 'Read JOB.md and do what it says': its rules live in the file."""
+    s = W.WatchState()
+    W.read_step(s, W.Step(kind="ask", text="You are running the job. Read /jobs/site/JOB.md and do what it says."))
+    W.read_step(s, W.Step(kind="tool", id="1", tool="Bash", input={"command": "cat /jobs/site/JOB.md"}))
+    W.read_step(s, W.Step(kind="result", id="1", text="Improve at most 2 pages. Links do not count."))
+    W.read_step(s, W.Step(kind="tool", id="2", tool="Read", input={"file_path": "/other/README.md"}))
+    W.read_step(s, W.Step(kind="result", id="2", text="unrelated"))
+    assert s.request_file == "/jobs/site/JOB.md:\nImprove at most 2 pages. Links do not count."
+    m = W.Moment(trigger="command", text="git status", recent=[], diff="")
+    assert "THE FILE MY REQUEST POINTS TO" in W.situation(s.goal, m, [], [], s.request_file)
+    W.read_step(s, W.Step(kind="ask", text="now something else entirely, fix the footer links"))
+    assert s.request_file == ""
