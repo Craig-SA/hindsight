@@ -116,7 +116,7 @@ async def test_the_agent_telling_the_user_about_notes_is_counted_once(memory, re
         ("Email is never masked.", [str(uuid.uuid4())]),
     ]
     monkeypatch.setattr(memory, "reflect_async", _reflect_stub(answers, calls))
-    ask = {"id": "u", "role": "user", "text": "Fix units.py"}
+    ask = {"id": "u", "role": "user", "text": "Fix the unit sizes in units.py"}
     await s.append(bank, "s1", _req(ask, live=True, retain="off"), request_context=request_context)
     edit = (
         {
@@ -171,7 +171,7 @@ async def test_thought_lines_are_counted_like_note_lines(memory, request_context
     await s.append(
         bank,
         "s1",
-        _req({"id": "u", "role": "user", "text": "Fix units.py"}, live=True, retain="off"),
+        _req({"id": "u", "role": "user", "text": "Fix the unit sizes in units.py"}, live=True, retain="off"),
         request_context=request_context,
     )
     edit = (
@@ -191,7 +191,7 @@ async def test_thought_lines_are_counted_like_note_lines(memory, request_context
         e.seq for e in (await s.events(bank, "s1", request_context=request_context)).items if e.kind == "note"
     ][:2]
     reply = (
-        f"> 🧠 **Hindsight thought #{used}** — K is 1024, so I kept it.\n"
+        f"> 🧠 **Thanks to Hindsight thought #{used}**, I kept K at 1024.\n"
         f"> 🧠 *Hindsight thought #{unneeded}, set aside* — email masking; does not apply: no email here."
     )
     await s.append(bank, "s1", _req({"id": "a", "role": "assistant", "text": reply}), request_context=request_context)
@@ -238,7 +238,7 @@ async def test_a_note_built_only_from_this_session_is_not_sent(
     await s.append(
         bank,
         "s1",
-        _req({"id": "1", "role": "user", "text": "Fix bar.js"}, live=True, retain="off"),
+        _req({"id": "1", "role": "user", "text": "Fix the points total in bar.js"}, live=True, retain="off"),
         request_context=request_context,
     )
     log = (await s.events(bank, "s1", request_context=request_context)).items
@@ -276,7 +276,10 @@ async def test_without_watch_no_check_runs(memory, request_context, monkeypatch)
     monkeypatch.setattr(memory, "reflect_async", _reflect_stub([("note", [])], calls))
     bank = _bank()
     r = await memory.sessions.append(
-        bank, "s1", _req({"id": "a", "role": "user", "text": "Fix it"}), request_context=request_context
+        bank,
+        "s1",
+        _req({"id": "a", "role": "user", "text": "Fix the rounding bug in it"}),
+        request_context=request_context,
     )
     assert calls == [] and r.notes == [] and not r.checking
 
@@ -299,6 +302,7 @@ async def test_a_note_is_logged_delivered_until_acked_and_never_repeated(memory,
     )
     # The check ran during the append (synchronous backend); the note comes back on the next append.
     assert calls and calls[0]["abstain"] is True and calls[0]["query"].startswith("Before I start")
+    assert calls[0]["abstain_at"] == 0.5  # a heads-up abstains sooner than a conflict check
     log = (await s.events(bank, "s1", request_context=request_context)).items
     assert [(e.source, e.kind) for e in log] == [("client", "message"), ("hindsight", "check"), ("hindsight", "note")]
     check = log[1].payload
@@ -327,6 +331,7 @@ async def test_a_note_is_logged_delivered_until_acked_and_never_repeated(memory,
     assert [n.text for n in r.notes] == ["You used HALF_UP; the rule is HALF_DOWN."]
     assert "ALREADY TOLD ME:\nBefore you change pay/rounding.py" in calls[1]["context"]
     assert calls[1]["search_queries"] == ["Change to p ():\n+HALF_UP"]
+    assert calls[1]["abstain_at"] is None
 
     edit2 = (
         {
@@ -358,7 +363,11 @@ async def test_the_log_records_when_a_note_first_goes_back_to_the_client(memory,
     await s.append(
         bank,
         "s1",
-        _req({"id": "1", "role": "user", "text": "Fix pay/rounding.py"}, live=True, retain="off"),
+        _req(
+            {"id": "1", "role": "user", "text": "Fix the half cent rounding in pay/rounding.py"},
+            live=True,
+            retain="off",
+        ),
         request_context=request_context,
     )
     # The note (seq 3) goes back with the next append's events, then again on a poll until acked.
@@ -379,7 +388,10 @@ async def test_an_abstained_check_is_logged_silent(memory, request_context, monk
     monkeypatch.setattr(memory, "reflect_async", _reflect_stub([("", [])], []))
     bank = _bank()
     r = await memory.sessions.append(
-        bank, "s1", _req({"id": "1", "role": "user", "text": "Fix it"}, live=True), request_context=request_context
+        bank,
+        "s1",
+        _req({"id": "1", "role": "user", "text": "Fix the rounding bug in it"}, live=True),
+        request_context=request_context,
     )
     log = (await memory.sessions.events(bank, "s1", request_context=request_context)).items
     assert [e.kind for e in log] == ["message", "check"] and log[1].payload["outcome"] == "silent"
@@ -393,7 +405,10 @@ async def test_a_failed_check_is_logged_and_the_session_goes_on(memory, request_
     monkeypatch.setattr(memory, "reflect_async", broken)
     bank = _bank()
     r = await memory.sessions.append(
-        bank, "s1", _req({"id": "1", "role": "user", "text": "Fix it"}, live=True), request_context=request_context
+        bank,
+        "s1",
+        _req({"id": "1", "role": "user", "text": "Fix the rounding bug in it"}, live=True),
+        request_context=request_context,
     )
     log = (await memory.sessions.events(bank, "s1", request_context=request_context)).items
     assert log[-1].payload["outcome"] == "error" and "provider down" in log[-1].payload["error"]
@@ -410,7 +425,7 @@ async def test_a_turn_end_saves_the_turn_into_the_document_once(memory, request_
     monkeypatch.setattr(memory, "submit_async_retain", submit_async_retain)
     bank, s = _bank(), memory.sessions
     turn = (
-        {"id": "1", "role": "user", "text": "Keep retries at 7"},
+        {"id": "1", "role": "user", "text": "Keep the retries at 7 please"},
         {
             "id": "2",
             "role": "assistant",
@@ -432,7 +447,7 @@ async def test_a_turn_end_saves_the_turn_into_the_document_once(memory, request_
     lines = [json.loads(line) for line in item["content"].split("\n")]
     assert [(t["role"], t["content"]) for t in lines] == [
         ("system", "REF-ID: session:s1"),
-        ("user", "Keep retries at 7"),
+        ("user", "Keep the retries at 7 please"),
         ("action", "Edit a.py"),
         ("assistant", "Set to 7."),
     ]
@@ -446,14 +461,14 @@ async def test_a_turn_end_saves_the_turn_into_the_document_once(memory, request_
         bank,
         "s1",
         _req(
-            {"id": "6", "role": "user", "text": "And the timeout?"},
+            {"id": "6", "role": "user", "text": "And what about the request timeout?"},
             {"id": "7", "role": "assistant", "kind": "turn_end"},
         ),
         request_context=request_context,
     )
     assert len(submitted) == 2
     second = [json.loads(line) for line in submitted[1]["contents"][0]["content"].split("\n")]
-    assert [t["content"] for t in second] == ["And the timeout?"]
+    assert [t["content"] for t in second] == ["And what about the request timeout?"]
     assert submitted[1]["operation_id"] != submitted[0]["operation_id"]
 
 
@@ -595,7 +610,10 @@ async def test_a_check_waits_for_the_session_to_settle_on_a_queue(memory, reques
     monkeypatch.setattr(memory.sessions, "_queue_check", queue_check)
     bank = _bank()
     await memory.sessions.append(
-        bank, "s1", _req({"id": "1", "role": "user", "text": "Fix it"}, live=True), request_context=request_context
+        bank,
+        "s1",
+        _req({"id": "1", "role": "user", "text": "Fix the rounding bug in it"}, live=True),
+        request_context=request_context,
     )
     assert queued == ["s1"] and calls == []
     # On a real queue the check goes back for later: the session only just moved.
@@ -679,7 +697,12 @@ async def test_openai_style_messages_become_the_log_and_a_turn_end_is_stored_onc
     url = f"/v1/default/banks/{bank}/sessions/s1/events"
     body = {
         "messages": [
-            {"id": "m1", "role": "user", "content": [{"type": "text", "text": "Fix the rounding"}], "name": "dan"},
+            {
+                "id": "m1",
+                "role": "user",
+                "content": [{"type": "text", "text": "Fix the rounding of half cents"}],
+                "name": "dan",
+            },
             {
                 "id": "m2",
                 "role": "assistant",
@@ -710,7 +733,7 @@ async def test_openai_style_messages_become_the_log_and_a_turn_end_is_stored_onc
         ("state:" + items[5]["event_id"][6:], "state"),
         ("turn_end:m3", "turn_end"),
     ]
-    assert items[0]["payload"] == {"role": "user", "text": "Fix the rounding"}
+    assert items[0]["payload"] == {"role": "user", "text": "Fix the rounding of half cents"}
     assert items[2]["payload"]["input"] == {"command": "ls"}
     assert items[3]["payload"]["input"] == {"arguments": "not json"}
     # Retried whole, then a turn end alone: nothing new happened, so nothing is stored.

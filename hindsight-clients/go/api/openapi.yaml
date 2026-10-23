@@ -13815,13 +13815,13 @@ components:
         credit_count:
           description: "Notes the agent told the user it used, each counted once:\
             \ assistant lines carrying `From Hindsight memory (live session #<note\
-            \ seq>)` or `**Hindsight thought #<note seq>**`."
+            \ seq>)` or `**Thanks to Hindsight thought #<note seq>**`."
           title: Credit Count
           type: integer
         dismissed_count:
           description: "Notes the agent told the user it did not need, each counted\
             \ once: assistant lines carrying `Hindsight note (live session #<note\
-            \ seq>)` or `Hindsight thought #<note seq>, set aside`."
+            \ seq>)` or `Hindsight thought #<note seq>, set aside` / `, already done`."
           title: Dismissed Count
           type: integer
         last_seq:

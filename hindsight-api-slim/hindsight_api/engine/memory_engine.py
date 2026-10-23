@@ -15821,6 +15821,7 @@ class MemoryEngine(MemoryEngineInterface):
         answer_as_document: bool = False,
         abstain: bool = False,
         search_queries: list[str] | None = None,
+        abstain_at: float | None = None,
         _skip_span: bool = False,
         _operation_label: str = "reflect",
     ) -> ReflectResult:
@@ -16239,6 +16240,7 @@ class MemoryEngine(MemoryEngineInterface):
                         abstain=abstain,
                         search_queries=search_queries,
                         pick_evidence_fn=decision_model.pick_answering if decision_model and abstain else None,
+                        abstain_at=abstain_at,
                         settled_llm_config=self._reflect_abstain_writer_llm.with_config(
                             resolved_reflect_config, bank_id=bank_id, operation=_operation_label
                         )

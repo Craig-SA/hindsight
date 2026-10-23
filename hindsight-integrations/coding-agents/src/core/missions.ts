@@ -72,7 +72,11 @@ export const OBSERVATIONS_MISSION =
   "supersedes an existing observation, UPDATE that observation to reflect the current state rather " +
   "than creating a sibling alongside it; note that the rule was revised and when, so the superseded " +
   "version is visible as history rather than as a competing claim. Never turn what one session did or " +
-  "chose for itself (where it ran, a per-run choice, a work-in-progress status) into a rule for the project.";
+  "chose for itself (where it ran, a per-run choice, a work-in-progress status) into a rule for the project. " +
+  // Beta: an agent's "left ~/.cache/huggingface untouched, per Hindsight note #129" became the rule
+  // "must stay untouched", and wrote the next note; an agent's own baseline step became a requirement.
+  "What an agent says a Hindsight note or thought told it is not a source. An agent's report that it " +
+  "did, left, skipped or could not do something is a status, not a rule.";
 
 /** Extraction modes the plugin can run its own strategies under (`custom` needs instructions the
  *  plugin does not have, so it is not offered). */

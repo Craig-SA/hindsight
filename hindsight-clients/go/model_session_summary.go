@@ -29,9 +29,9 @@ type SessionSummary struct {
 	EventCount int32 `json:"event_count"`
 	CheckCount int32 `json:"check_count"`
 	NoteCount int32 `json:"note_count"`
-	// Notes the agent told the user it used, each counted once: assistant lines carrying `From Hindsight memory (live session #<note seq>)` or `**Hindsight thought #<note seq>**`.
+	// Notes the agent told the user it used, each counted once: assistant lines carrying `From Hindsight memory (live session #<note seq>)` or `**Thanks to Hindsight thought #<note seq>**`.
 	CreditCount int32 `json:"credit_count"`
-	// Notes the agent told the user it did not need, each counted once: assistant lines carrying `Hindsight note (live session #<note seq>)` or `Hindsight thought #<note seq>, set aside`.
+	// Notes the agent told the user it did not need, each counted once: assistant lines carrying `Hindsight note (live session #<note seq>)` or `Hindsight thought #<note seq>, set aside` / `, already done`.
 	DismissedCount int32 `json:"dismissed_count"`
 	LastSeq int32 `json:"last_seq"`
 	SavedSeq int32 `json:"saved_seq"`

@@ -107,6 +107,20 @@ async def test_nothing_answers_returns_empty_with_no_llm_call():
 
 
 @pytest.mark.asyncio
+async def test_a_caller_can_lower_the_bar_for_answering_nothing():
+    """A live session's heads-up abstains at none 0.5, not reflect's 0.9."""
+    provider = _ScriptedProvider([])
+    pick = AsyncMock(return_value=EvidencePick(none=0.6, candidates=[0.3, 0.1]))
+
+    result = await _reflect(provider, pick=pick, abstain_at=0.5)
+
+    assert result.abstained and result.text == "" and provider.tool_choices == []
+    assert [c.detail for c in result.llm_trace if c.scope == "decision_pick"] == [
+        "none=0.60 of 2 offered: silent, no LLM"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_the_answer_reads_only_what_the_decision_model_picked():
     provider = _ScriptedProvider([], answer="Memory suffixes are binary: K=1024.")
     pick = AsyncMock(return_value=EvidencePick(none=0.2, candidates=[0.78, 0.02]))

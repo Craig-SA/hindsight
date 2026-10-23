@@ -209,8 +209,8 @@ def test_the_end_of_a_turn_drops_a_pending_closing_message_but_not_an_edit():
 
 def test_the_same_request_with_other_whitespace_is_judged_once_and_a_note_never_repeats_word_for_word():
     s = W.WatchState()
-    a = W.Moment(trigger="task", text="Fix the rounding.", recent=[], diff="")
-    b = W.Moment(trigger="task", text="Fix the rounding.\n", recent=[], diff="")
+    a = W.Moment(trigger="task", text="Fix the rounding of half cents.", recent=[], diff="")
+    b = W.Moment(trigger="task", text="Fix the rounding of half cents.\n", recent=[], diff="")
     assert W.skip_reason(s, a) is None and W.skip_reason(s, b) == "already judged"
     assert W.accept_note(s, a, "Before you change round_cents: half cents round down.", ["m1"])
     assert not W.accept_note(s, a, "Before you change round_cents: half cents round down.", ["m2"])
@@ -252,3 +252,35 @@ def test_a_read_after_a_cd_on_its_own_line_is_not_a_moment():
         assert W.READ_ONLY_CMD.match(cmd), cmd
     for cmd in ("cd /repo\nrm -rf build", "cd /repo\ngit push origin main", "gh pr merge 63", "gh run rerun 1"):
         assert not W.READ_ONLY_CMD.match(cmd), cmd
+
+
+def test_a_request_that_names_no_work_gets_no_heads_up():
+    """'/ship-it' searched memory by its own words and got a note about whatever shared them."""
+
+    def reason(text: str) -> str | None:
+        return W.skip_reason(W.WatchState(), W.Moment(trigger="task", text=text, recent=[], diff=""))
+
+    assert reason("/ship-it") == "request names no work"
+    assert reason("obs cleanup? https://github.com/acme/app/issues/12") == "request names no work"
+    assert reason("can you fix 5969 and /ship-it") is None
+    assert W.skip_reason(W.WatchState(), W.Moment(trigger="command", text="ls", recent=[], diff="")) is None
+
+
+def test_a_saved_reply_leaves_out_the_lines_about_notes():
+    """Saved, the agent's 'per Hindsight note #129' lines came back as rules (beta)."""
+    from datetime import UTC, datetime
+
+    from hindsight_api.engine.sessions.service import _turn
+
+    reply = (
+        "Freed 12 GB from the build caches.\n"
+        "> 🧠 **Thanks to Hindsight thought #129**, I left ~/.cache/huggingface alone.\n"
+        "> 🧠 *Hindsight thought #130, set aside* — the 15-folder list; does not apply: no drop.\n"
+        "> 🧠 **From Hindsight memory (live session #131)** — K is 1024."
+    )
+    turn = _turn("message", {"role": "assistant", "text": reply}, datetime.now(UTC))
+    assert turn is not None and turn.content == "Freed 12 GB from the build caches."
+    only = _turn(
+        "message", {"role": "assistant", "text": "> 🧠 *Hindsight thought #9, already done* — x"}, datetime.now(UTC)
+    )
+    assert only is None

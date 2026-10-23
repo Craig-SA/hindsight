@@ -32,6 +32,17 @@ from pydantic import BaseModel, Field
 
 Trigger = Literal["task", "plan", "command", "edit", "failure"]
 
+# A heads-up needs a request that says what it is about. "/ship-it", "obs cleanup?" or a bare issue link
+# searched memory by the command's own words and got a note about whatever shared them: 10 of 37
+# irrelevant or wrong notes in beta. The prompt's "reply with nothing" for these was ignored, so it is a
+# gate here. The shortest request whose heads-up changed the work had 5 words.
+MIN_REQUEST_WORDS = 5
+_SLASH_OR_URL = re.compile(r"(?<!\S)/[\w:.-]+|https?://\S+")
+_WORK_WORD = re.compile(r"[^\W_][\w'-]*")
+# A heads-up abstains when the decision model puts "none of these applies" at or above this, not at
+# reflect's own 0.9: in beta every irrelevant heads-up scored 0.5-0.89, every one that changed the
+# agent's work 0.41 or less. Conflict checks keep reflect's bar: there the two overlapped.
+HEADSUP_ABSTAIN_AT = 0.5
 # Per user request, not per session: a benchmark session is one task, but a real one runs for days
 # across many requests, and a per-session cap left a session silent for hours after three notes
 # (two of them wrong) — 49 checks an hour skipped as "note limit reached" (beta, 2026-10-22).
@@ -367,6 +378,8 @@ def skip_reason(state: WatchState, m: Moment) -> str | None:
     """Why the moment is not worth a reflect call, or None (and then it is recorded as judged)."""
     if state.request_notes >= MAX_NOTES:
         return "note limit reached"
+    if m.trigger == "task" and len(_WORK_WORD.findall(_SLASH_OR_URL.sub(" ", m.text))) < MIN_REQUEST_WORDS:
+        return "request names no work"
     if not (m.diff if _by_diff(m) else m.text).strip():
         return "nothing to judge"
     key = moment_key(m)

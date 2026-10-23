@@ -173,11 +173,11 @@ class SessionSummary(BaseModel):
     note_count: int
     credit_count: int = Field(
         description="Notes the agent told the user it used, each counted once: assistant lines carrying "
-        "`From Hindsight memory (live session #<note seq>)` or `**Hindsight thought #<note seq>**`."
+        "`From Hindsight memory (live session #<note seq>)` or `**Thanks to Hindsight thought #<note seq>**`."
     )
     dismissed_count: int = Field(
         description="Notes the agent told the user it did not need, each counted once: assistant lines carrying "
-        "`Hindsight note (live session #<note seq>)` or `Hindsight thought #<note seq>, set aside`."
+        "`Hindsight note (live session #<note seq>)` or `Hindsight thought #<note seq>, set aside` / `, already done`."
     )
     last_seq: int
     saved_seq: int

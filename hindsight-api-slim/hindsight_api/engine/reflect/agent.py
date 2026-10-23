@@ -167,6 +167,8 @@ _NOTHING_TO_SEARCH = "NONE"
 # these states it" at or above this. Below it the LLM reads what was picked and may still answer
 # nothing: on sde-bench the watcher's no-conflict moments sat at 0.93-1.0, its real misses at 0.52-0.61.
 _ABSTAIN_AT = 0.9
+# A caller can lower it (``abstain_at``): a live session's heads-up at the start of a request scored
+# none 0.5-0.89 on every irrelevant one in beta, and <= 0.41 on every one that changed the work.
 # What an ``abstain`` reflect's answer reads: the candidates picked at least this likely (and the
 # likeliest one always), instead of the whole pruned round.
 _PICK_FLOOR = 0.1
@@ -680,6 +682,7 @@ async def _run_reflect_agent_inner(
     abstain: bool = False,
     search_queries: list[str] | None = None,
     pick_evidence_fn: Callable[[str, str | None, list[str]], Awaitable["EvidencePick"]] | None = None,
+    abstain_at: float | None = None,
     settled_llm_config: "AnyLLMProvider | None" = None,
     *,
     reflect_id: str,
@@ -2148,7 +2151,9 @@ async def _run_reflect_agent_inner(
             elif parallel_round:
                 if abstain and pick_evidence_fn is not None and iteration == 0:
                     pick_start = time.perf_counter()
-                    picked_round = await _pick_round(query, context, tool_results, pick_evidence_fn, reflect_id)
+                    picked_round = await _pick_round(
+                        query, context, tool_results, pick_evidence_fn, reflect_id, abstain_at or _ABSTAIN_AT
+                    )
                     llm_trace.append(
                         {
                             "scope": "decision_pick",
@@ -2468,6 +2473,7 @@ async def _pick_round(
     tool_results: list[Any],
     pick_evidence_fn: Callable[[str, str | None, list[str]], Awaitable["EvidencePick"]],
     reflect_id: str,
+    abstain_at: float = _ABSTAIN_AT,
 ) -> _PickedRound | None:
     """Keep only the candidates the decision model says the answer depends on, or report that none does.
 
@@ -2486,7 +2492,7 @@ async def _pick_round(
     except Exception as e:
         logger.warning(f"[REFLECT {reflect_id}] Decision-orchestrated: the evidence pick failed: {e}")
         return None
-    if pick.none >= _ABSTAIN_AT:
+    if pick.none >= abstain_at:
         logger.info(
             f"[REFLECT {reflect_id}] Decision-orchestrated: no evidence states the answer (none={pick.none:.2f})."
         )

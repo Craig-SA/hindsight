@@ -15,12 +15,18 @@ import type { SessionNote } from "./session-events";
 export const NOTE_LEAD = "🧠 Hindsight thought:";
 
 /**
- * How the agent credits a note to the user: the same blockquote as every other Hindsight
- * memory it uses (inject.ts, knowledge-tools.ts), named after the live session.
+ * How the agent credits a thought that changed what it did — only that: the user should see plainly
+ * when Hindsight helped, and the server counts these lines as the thoughts that did. In beta the
+ * agent "used" 34 notes of which a judge found 8 changed its work; the rest only agreed with it.
  */
-/** The credit line for note `n` (its seq): the server counts the notes named this way. */
-export const noteCredit = (n: number | string): string => `> 🧠 **Hindsight thought #${n}** —`;
+export const noteCredit = (n: number | string): string =>
+  `> 🧠 **Thanks to Hindsight thought #${n}**,`;
 export const NOTE_CREDIT = noteCredit("<number>");
+
+/** A thought the agent was already following: worth saying, not worth thanking. */
+export const noteConfirmed = (n: number | string): string =>
+  `> 🧠 *Hindsight thought #${n}, already done* —`;
+export const NOTE_CONFIRMED = noteConfirmed("<number>");
 
 /**
  * How the agent tells the user about a note it did not need: every note is mentioned, so the user
@@ -42,11 +48,14 @@ export const LIVE_DECLARATION =
   "if the source says what the thought claims, act on it as part of the task. Set it aside only if the " +
   "source does not say so, or it does not touch your work: a thought that applies is acted on, never " +
   "set aside. Share every thought with the user in your " +
-  "reply, one line each, by its number, so they see memory thinking. A thought that shaped what you did:\n" +
-  `${NOTE_CREDIT} <what came to mind and what you did with it>\n` +
-  "A thought you set aside:\n" +
+  "reply, one line each, by its number, so they see memory thinking. A thought that changed what you " +
+  "did (you fixed, added, avoided or undid something because of it):\n" +
+  `${NOTE_CREDIT} <what you did differently>\n` +
+  "A thought you were already following:\n" +
+  `${NOTE_CONFIRMED} <what it said>\n` +
+  "A thought that does not apply:\n" +
   `${NOTE_DISMISS} <what it was>; does not apply: <why>\n` +
-  "Never use the first line for a thought you set aside.";
+  "Use the first line only for a thought that changed your work.";
 
 /** Where the agent can read a note's source. Commit ids are this repo's own, so git can show them. */
 function whereFor(source: SessionNote["source"]): string {
@@ -66,7 +75,8 @@ export function renderNote(n: SessionNote): string {
   const quote = n.source?.quote ?? "";
   return (
     `${NOTE_LEAD.replace("thought:", `thought #${n.seq}:`)} ${n.text.trim()} Source: ${whereFor(n.source)}${quote ? ` — "${quote}"` : ""}` +
-    `. Share it with the user: "${noteCredit(n.seq)} …" if it shaped your work, else "${noteDismiss(n.seq)} …; does not apply: …"`
+    `. Share it with the user: "${noteCredit(n.seq)} …" if it changed what you did, ` +
+    `"${noteConfirmed(n.seq)} …" if you were already doing it, else "${noteDismiss(n.seq)} …; does not apply: …"`
   );
 }
 

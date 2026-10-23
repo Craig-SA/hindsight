@@ -24,12 +24,14 @@ describe("noteMentions", () => {
 
   it("reads the thought lines the coding-agents plugin asks for", () => {
     const out = noteMentions([
-      msg(1, "assistant", "> 🧠 **Hindsight thought #7** — kept K at 1024."),
+      msg(1, "assistant", "> 🧠 **Thanks to Hindsight thought #7**, I kept K at 1024."),
+      msg(3, "assistant", "> 🧠 *Hindsight thought #9, already done* — K was 1024 already."),
       msg(2, "assistant", "> 🧠 *Hindsight thought #8, set aside* — email rule; does not apply: no email."),
     ]);
     expect([...out.entries()].sort()).toEqual([
       [7, "used"],
       [8, "unneeded"],
+      [9, "unneeded"],
     ]);
   });
 });

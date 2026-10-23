@@ -94,13 +94,14 @@ SAVE_EVERY_EVENTS = 300
 # streams in, so every client that asks for the same lines is counted the same way.
 # One line can name several notes ("live session #10 / #21"): in beta reading only the first left
 # the other counted as not needed.
-# The coding-agents plugin now has the agent name notes as thoughts ("Hindsight thought #12" in
-# bold, or "Hindsight thought #12, set aside"); the note lines stay counted for clients that use them.
+# The coding-agents plugin has the agent name notes as thoughts: "**Thanks to Hindsight thought #12**"
+# only when it changed the work, else "Hindsight thought #12, already done" or ", set aside" (both
+# counted as not needed). The note lines stay counted for clients that use them.
 CREDIT_RE = re.compile(
     r"From Hindsight memory \(live session (#\d+[^)]*)\)|Hindsight thought (#\d+(?:\s*(?:/|,|and)\s*#\d+)*)\*\*"
 )
 DISMISS_RE = re.compile(
-    r"Hindsight note \(live session (#\d+[^)]*)\)|Hindsight thought (#\d+(?:\s*(?:/|,|and)\s*#\d+)*), set aside"
+    r"Hindsight note \(live session (#\d+[^)]*)\)|Hindsight thought (#\d+(?:\s*(?:/|,|and)\s*#\d+)*), (?:set aside|already done)"
 )
 NOTE_NUMBER_RE = re.compile(r"#(\d+)")
 # How the saved conversation reads to extraction when the client does not say: who is speaking.
@@ -218,12 +219,24 @@ def _action_line(tool: str, data: dict[str, Any]) -> str:
     return f"{tool} {target}".strip()
 
 
+def _without_note_lines(text: str) -> str:
+    """The agent's reply without the lines where it tells the user about a note. Saved, they came back
+    as rules: "cleanup must leave ~/.cache/huggingface untouched, as required by Hindsight note #129" was
+    an observation built from the agent repeating a note, and it then wrote the next note (beta)."""
+    if "Hindsight" not in text:
+        return text
+    return "\n".join(line for line in text.split("\n") if not (CREDIT_RE.search(line) or DISMISS_RE.search(line)))
+
+
 def _turn(kind: str, payload: dict[str, Any], at: datetime) -> SavedTurn | None:
     """One logged client event as a saved transcript line, or None when it is not saved: what was
     said, and one compact line per tool call. Tool output, state snapshots and markers are left out."""
     role = payload.get("role")
-    if kind == "message" and role in ("user", "assistant") and (payload.get("text") or "").strip():
-        return SavedTurn(role=role, content=payload["text"], timestamp=at.isoformat())
+    text = payload.get("text") or ""
+    if kind == "message" and role == "assistant":
+        text = _without_note_lines(text)
+    if kind == "message" and role in ("user", "assistant") and text.strip():
+        return SavedTurn(role=role, content=text, timestamp=at.isoformat())
     if kind == "tool_call" and payload.get("tool"):
         inp = payload.get("input")
         return SavedTurn(
@@ -758,6 +771,7 @@ class SessionService:
                     exclude_mental_models=True,
                     abstain=True,
                     search_queries=queries,
+                    abstain_at=W.HEADSUP_ABSTAIN_AT if m.trigger == "task" else None,
                     request_context=rc,
                 ),
                 timeout=CHECK_TIMEOUT_S,
