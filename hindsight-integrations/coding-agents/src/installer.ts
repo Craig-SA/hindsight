@@ -230,7 +230,8 @@ const cmdHook = (dist: string, file: string, timeout: number) => ({
 
 /** The command STRING for a host that runs `node <script>`. The path is quoted only when it needs
  *  to be: Antigravity CLI runs these without a shell on Windows, so the quotes reach node as part
- *  of the path, it reads `"C:\…"` as relative and fails with MODULE_NOT_FOUND (#5913). */
+ *  of the path, it reads `"C:\…"` as relative and fails with MODULE_NOT_FOUND (#5913). cursor-cli
+ *  and copilot-cli share the flat hook branch; they run through a shell, where both forms are equal. */
 export const nodeCommand = (script: string): string =>
   script.includes(" ") ? `node "${script}"` : `node ${script}`;
 
@@ -400,7 +401,9 @@ function runDcodePlugin(args: string[]): boolean {
  * on v2's `plugins` key ("Configuration is invalid … Unrecognized key: plugins"), so a v2-specific
  * entry is not an option. One entry serves both because they resolve a plugin directory
  * differently — v1 follows package.json `main` (dist/index.js), v2 loads `<dir>/index.js` — and v2
- * migrates the legacy `plugin` key to `plugins` for itself. See src/opencode2.ts.
+ * migrates the legacy `plugin` key to `plugins` for itself. A host that looks the package up by name
+ * (v2 given a non-absolute entry, v1 1.18+) reads `exports["./server"]` first, whose default
+ * serves both contracts. See src/opencode2.ts.
  *
  * Consequences worth knowing: installing either harness wires the other one too (the MARKER filter
  * keeps that idempotent), and uninstalling either removes the shared entry.

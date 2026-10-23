@@ -1529,7 +1529,7 @@ describe("antigravity-cli installer", () => {
     });
     expect(readJson(settingsPath(ctx)).statusLine).toEqual({
       type: "command",
-      command: nodeCommand(join(ctx.dist, "antigravity-statusline.js")),
+      command: `node ${join(ctx.dist, "antigravity-statusline.js")}`,
     });
   });
 
