@@ -305,10 +305,16 @@ def test_the_file_a_request_points_to_becomes_part_of_the_request():
     s = W.WatchState()
     W.read_step(s, W.Step(kind="ask", text="You are running the job. Read /jobs/site/JOB.md and do what it says."))
     W.read_step(s, W.Step(kind="tool", id="1", tool="Bash", input={"command": "cat /jobs/site/JOB.md"}))
-    W.read_step(s, W.Step(kind="result", id="1", text="Improve at most 2 pages. Links do not count."))
+    W.read_step(s, W.Step(kind="result", id="1", text="This Bash command requires approval: cat"))
+    W.read_step(s, W.Step(kind="tool", id="9", tool="Read", input={"file_path": "/jobs/site/JOB.md"}))
+    W.read_step(s, W.Step(kind="result", id="9", text="Improve at most 2 pages. Links do not count."))
     W.read_step(s, W.Step(kind="tool", id="2", tool="Read", input={"file_path": "/other/README.md"}))
     W.read_step(s, W.Step(kind="result", id="2", text="unrelated"))
     assert s.request_file == "/jobs/site/JOB.md:\nImprove at most 2 pages. Links do not count."
+    # A refused or short read never replaces the file; a longer read of it does.
+    W.read_step(s, W.Step(kind="tool", id="3", tool="Bash", input={"command": "cat /jobs/site/JOB.md"}))
+    W.read_step(s, W.Step(kind="result", id="3", text="denied", error=True))
+    assert s.request_file.endswith("Links do not count.")
     m = W.Moment(trigger="command", text="git status", recent=[], diff="")
     assert "THE FILE MY REQUEST POINTS TO" in W.situation(s.goal, m, [], [], s.request_file)
     W.read_step(s, W.Step(kind="ask", text="now something else entirely, fix the footer links"))

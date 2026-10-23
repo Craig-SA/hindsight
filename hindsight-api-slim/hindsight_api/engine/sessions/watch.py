@@ -334,8 +334,11 @@ def read_step(state: WatchState, step: Step, seq: int = 0) -> None:
     else:
         tool, inp = state.tools.pop(step.id, ("", {}))
         named = _file_the_request_names(state.goal, _target(inp))
-        if named and not state.request_file and tool_family(tool) != "edit" and step.text.strip():
-            state.request_file = f"{named}:\n{step.text[:REQUEST_FILE_CAP]}"
+        # The longest read wins and a failed one never counts: in beta the first try was a `cat` the
+        # harness refused for approval, and its refusal was kept as the job's file over the real Read.
+        read = f"{named}:\n{step.text[:REQUEST_FILE_CAP]}"
+        if named and not step.error and tool_family(tool) != "edit" and len(read) > len(state.request_file):
+            state.request_file = read
         if _is_own_note(state, step.text):
             said = "the agent was given the watcher's note"
         elif tool_family(tool) == "edit":
