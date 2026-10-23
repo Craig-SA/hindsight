@@ -51,6 +51,12 @@ SET_ASIDE_KEPT = 20
 # what that file makes an exception to, because the check saw only "Read JOB.md and do what it says".
 REQUEST_FILE = re.compile(r"[\w./~-]+\.(?:md|txt|ya?ml|json|toml)\b")
 REQUEST_FILE_CAP = 4000
+# Words in a heads-up's "Before you change <X>" that name no code of their own.
+_GENERIC_TARGET_WORDS = frozenset(
+    "code handling change changes rule rules workflow workflows documentation installation deployment "
+    "procedure issue invoke plugin interaction native chat lookup organization admission cleanup side "
+    "serve test tests fixtures repair deletion routing development release".split()
+)
 # Per user request, not per session: a benchmark session is one task, but a real one runs for days
 # across many requests, and a per-session cap left a session silent for hours after three notes
 # (two of them wrong) — 49 checks an hour skipped as "note limit reached" (beta, 2026-10-22).
@@ -235,6 +241,20 @@ def tool_family(name: str) -> Literal["edit", "command", "other"]:
     if COMMAND_WORDS.intersection(words):
         return "command"
     return "other"
+
+
+def headsup_names_other_code(note: str, request: str) -> bool:
+    """Whether a heads-up ("Before you change X: ...") is about code the request never mentions. The
+    answer model guesses which code the request will change; in beta every heads-up whose X shared no
+    word with the request was irrelevant or only confirmed (10 of 10), while all 11 that changed the
+    agent's work named something the request did (a prefix is enough: "cataglog" for "catalog")."""
+    m = re.match(r"\s*Before you change (.+?):", note)
+    if not m:
+        return False
+    words = {w.lower() for w in re.findall(r"[A-Za-z][A-Za-z0-9]*", m.group(1))} - _GENERIC_TARGET_WORDS
+    words = {w for w in words if len(w) >= 4}
+    req = request.lower()
+    return bool(words) and not any(w[:5] in req for w in words)
 
 
 def _file_the_request_names(goal: str, target: str) -> str:

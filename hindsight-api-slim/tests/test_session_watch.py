@@ -313,3 +313,16 @@ def test_the_file_a_request_points_to_becomes_part_of_the_request():
     assert "THE FILE MY REQUEST POINTS TO" in W.situation(s.goal, m, [], [], s.request_file)
     W.read_step(s, W.Step(kind="ask", text="now something else entirely, fix the footer links"))
     assert s.request_file == ""
+
+
+def test_a_heads_up_about_code_the_request_never_mentions_is_dropped():
+    """The answer model guesses which code a request will change; guessed wrong, the note was noise."""
+    assert W.headsup_names_other_code(
+        "Before you change indexer handling: keep NoManifest typed.", "handle the 404 pls"
+    )
+    assert W.headsup_names_other_code("Before you change the OpenClaw plugin: no 0.13.x.", "/ship-it")
+    # A word the request shares, even misspelled, keeps it; a conflict is never judged this way.
+    assert not W.headsup_names_other_code(
+        "Before you change `bank-catalog-size`: hold off.", "so we skipped the bank cataglog size thing"
+    )
+    assert not W.headsup_names_other_code("You set 10; the rule is 7.", "anything")

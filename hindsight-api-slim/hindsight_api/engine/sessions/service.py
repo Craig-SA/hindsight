@@ -822,6 +822,12 @@ class SessionService:
         # user's new request) turn after turn, each time under a new memory id, and the agent dismissed
         # every one. A memory with any source outside this session is a real past decision and stays.
         own = bool(text) and not error and await self._from_this_session_only(bank_id, session_id, memory_ids, rc)
+        elsewhere = (
+            bool(text)
+            and not error
+            and m.trigger == "task"
+            and W.headsup_names_other_code(text, goal + "\n" + request_file)
+        )
 
         backend = await self._engine._get_backend()
         async with acquire_with_retry(backend) as conn:
@@ -837,7 +843,7 @@ class SessionService:
                 if row is None:
                     return
                 state = W.WatchState.model_validate(conn.parse_json(row["watch_state"]) or {})
-                spoke = not error and not own and W.accept_note(state, m, text, memory_ids)
+                spoke = not error and not own and not elsewhere and W.accept_note(state, m, text, memory_ids)
                 outcome = "error" if error else "note" if spoke else "repeat" if text else "silent"
                 check_seq = await self._log(
                     conn,
@@ -858,6 +864,7 @@ class SessionService:
                         usage=usage,
                         llm_calls=calls,
                         **({"reason": "this session"} if own else {}),
+                        **({"reason": "code the request is not about"} if elsewhere else {}),
                     ),
                 )
                 if spoke:
