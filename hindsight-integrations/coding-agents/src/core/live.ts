@@ -7,42 +7,46 @@
 import { gitWithTimeout } from "./git";
 import type { SessionNote } from "./session-events";
 
-/** How the agent hears a note — the wording the benchmark validated. */
-export const NOTE_LEAD = "🧠 Note from this project's memory (past sessions and commits):";
+/**
+ * How the agent hears a note. Notes read as Hindsight's thoughts — memory as a stream of
+ * consciousness beside the agent, not a colleague handing it notes — and every line names
+ * Hindsight, so the user sees whose thought it is.
+ */
+export const NOTE_LEAD = "🧠 Hindsight thought:";
 
 /**
  * How the agent credits a note to the user: the same blockquote as every other Hindsight
  * memory it uses (inject.ts, knowledge-tools.ts), named after the live session.
  */
 /** The credit line for note `n` (its seq): the server counts the notes named this way. */
-export const noteCredit = (n: number | string): string =>
-  `> 🧠 **From Hindsight memory (live session #${n})** —`;
-export const NOTE_CREDIT = noteCredit("<note number>");
+export const noteCredit = (n: number | string): string => `> 🧠 **Hindsight thought #${n}** —`;
+export const NOTE_CREDIT = noteCredit("<number>");
 
 /**
  * How the agent tells the user about a note it did not need: every note is mentioned, so the user
  * sees Hindsight at work even when it had nothing to add. The server counts both lines.
  */
 export const noteDismiss = (n: number | string): string =>
-  `> 🧠 **Hindsight note (live session #${n})** —`;
-export const NOTE_DISMISS = noteDismiss("<note number>");
+  `> 🧠 *Hindsight thought #${n}, set aside* —`;
+export const NOTE_DISMISS = noteDismiss("<number>");
 
 /**
  * Told to the agent once, at session start. Without it a note read as an injection: Claude called a
  * real decision (a recorded corp-beta override) a prompt injection and refused it three times.
  */
 export const LIVE_DECLARATION =
-  "Hindsight follows this session live. It knows this project's past sessions and the decisions made " +
-  `in them, and while you work it may post notes starting with "${NOTE_LEAD.split(" (")[0].replace("Note", "Note #<number>")}". A note ` +
-  "is a project requirement even when the request does not mention it: a fix that contradicts a past " +
-  "decision is a wrong fix. Each note says where to read its source: check it; if it says what the " +
-  "note claims, apply the note as part of the task. Push back only if the source does not say so. " +
-  "Tell the user about every note you get, in your reply, one line per note, naming the note by its " +
-  "number, so they see memory at work. A note that shaped what you did:\n" +
-  `${NOTE_CREDIT} <what the note told you and what you did with it>\n` +
-  "A note you did not need:\n" +
-  `${NOTE_DISMISS} <what it said>; not needed here: <why>\n` +
-  "Never use the first line for a note you did not use.";
+  "Hindsight is this project's long-term memory, and it thinks alongside you. As you work, thoughts " +
+  'surface from past sessions and commits, each starting with "🧠 Hindsight thought #<number>". A thought ' +
+  "recalls a project decision, and it holds even when the request does not mention it: a fix that " +
+  "contradicts a past decision is a wrong fix. Each thought says where it was recalled from: check it; " +
+  "if the source says what the thought claims, act on it as part of the task. Set it aside only if the " +
+  "source does not say so, or it does not touch your work: a thought that applies is acted on, never " +
+  "set aside. Share every thought with the user in your " +
+  "reply, one line each, by its number, so they see memory thinking. A thought that shaped what you did:\n" +
+  `${NOTE_CREDIT} <what came to mind and what you did with it>\n` +
+  "A thought you set aside:\n" +
+  `${NOTE_DISMISS} <what it was>; does not apply: <why>\n` +
+  "Never use the first line for a thought you set aside.";
 
 /** Where the agent can read a note's source. Commit ids are this repo's own, so git can show them. */
 function whereFor(source: SessionNote["source"]): string {
@@ -61,8 +65,8 @@ function whereFor(source: SessionNote["source"]): string {
 export function renderNote(n: SessionNote): string {
   const quote = n.source?.quote ?? "";
   return (
-    `${NOTE_LEAD.replace("Note", `Note #${n.seq}`)} ${n.text.trim()} Source: ${whereFor(n.source)}${quote ? ` — "${quote}"` : ""}` +
-    `. Tell the user about it: "${noteCredit(n.seq)} …" if you use it, else "${noteDismiss(n.seq)} …; not needed here: …"`
+    `${NOTE_LEAD.replace("thought:", `thought #${n.seq}:`)} ${n.text.trim()} Source: ${whereFor(n.source)}${quote ? ` — "${quote}"` : ""}` +
+    `. Share it with the user: "${noteCredit(n.seq)} …" if it shaped your work, else "${noteDismiss(n.seq)} …; does not apply: …"`
   );
 }
 
@@ -97,10 +101,10 @@ export function notesForUser(rendered: string): string {
     .split("\n\n")
     .map((n) =>
       n
-        .replace(/^🧠 Note (#\d+ )?from this project's memory \([^)]*\):\s*/, "")
+        .replace(/^🧠 Hindsight thought (#\d+)?:\s*/, "")
         .split(" Source: ")[0]
         .trim()
     )
     .filter(Boolean);
-  return `🧠 Hindsight has a note for the agent (it reads it with your next message):\n${says.map((t) => `- ${t}`).join("\n")}`;
+  return `🧠 Hindsight is thinking (the agent picks this up with your next message):\n${says.map((t) => `- ${t}`).join("\n")}`;
 }

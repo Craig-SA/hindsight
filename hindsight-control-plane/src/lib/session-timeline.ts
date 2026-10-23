@@ -218,8 +218,9 @@ export type NoteMention = "used" | "unneeded";
 
 // The lines the agent is asked to write about a note (the server counts the same ones:
 // hindsight_api/engine/sessions/service.py CREDIT_RE / DISMISS_RE).
-const USED_RE = /From Hindsight memory \(live session #(\d+)\)/g;
-const UNNEEDED_RE = /Hindsight note \(live session #(\d+)\)/g;
+// The coding-agents plugin names notes as Hindsight thoughts; the note lines stay for other clients.
+const USED_RE = /From Hindsight memory \(live session #(\d+)\)|Hindsight thought #(\d+)\*\*/g;
+const UNNEEDED_RE = /Hindsight note \(live session #(\d+)\)|Hindsight thought #(\d+), set aside/g;
 
 /** The notes the agent's own messages name as used or not needed. */
 export function noteMentions(events: SessionEvent[]): Map<number, NoteMention> {
@@ -227,8 +228,11 @@ export function noteMentions(events: SessionEvent[]): Map<number, NoteMention> {
   for (const ev of events) {
     const p = (ev.payload ?? {}) as Record<string, unknown>;
     if (ev.kind !== "message" || p.role !== "assistant" || typeof p.text !== "string") continue;
-    for (const m of p.text.matchAll(UNNEEDED_RE)) if (!out.has(+m[1])) out.set(+m[1], "unneeded");
-    for (const m of p.text.matchAll(USED_RE)) out.set(+m[1], "used");
+    for (const m of p.text.matchAll(UNNEEDED_RE)) {
+      const n = +(m[1] ?? m[2]);
+      if (!out.has(n)) out.set(n, "unneeded");
+    }
+    for (const m of p.text.matchAll(USED_RE)) out.set(+(m[1] ?? m[2]), "used");
   }
   return out;
 }

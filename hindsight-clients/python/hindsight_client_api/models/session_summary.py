@@ -34,8 +34,8 @@ class SessionSummary(BaseModel):
     event_count: StrictInt
     check_count: StrictInt
     note_count: StrictInt
-    credit_count: StrictInt = Field(description="Notes the agent told the user it used, each counted once: assistant lines carrying `From Hindsight memory (live session #<note seq>)`.")
-    dismissed_count: StrictInt = Field(description="Notes the agent told the user it did not need, each counted once: assistant lines carrying `Hindsight note (live session #<note seq>)`.")
+    credit_count: StrictInt = Field(description="Notes the agent told the user it used, each counted once: assistant lines carrying `From Hindsight memory (live session #<note seq>)` or `**Hindsight thought #<note seq>**`.")
+    dismissed_count: StrictInt = Field(description="Notes the agent told the user it did not need, each counted once: assistant lines carrying `Hindsight note (live session #<note seq>)` or `Hindsight thought #<note seq>, set aside`.")
     last_seq: StrictInt
     saved_seq: StrictInt
     acked_seq: StrictInt

@@ -159,6 +159,46 @@ async def test_the_agent_telling_the_user_about_notes_is_counted_once(memory, re
     assert (summary.credit_count, summary.dismissed_count) == (2, 0)
 
 
+async def test_thought_lines_are_counted_like_note_lines(memory, request_context, monkeypatch):
+    """The coding-agents plugin has the agent name notes as Hindsight thoughts: those count the same."""
+    bank = _bank()
+    s = memory.sessions
+    answers = [
+        ("Before you change units.py: K is 1024.", [str(uuid.uuid4())]),
+        ("Email is never masked.", [str(uuid.uuid4())]),
+    ]
+    monkeypatch.setattr(memory, "reflect_async", _reflect_stub(answers, []))
+    await s.append(
+        bank,
+        "s1",
+        _req({"id": "u", "role": "user", "text": "Fix units.py"}, live=True, retain="off"),
+        request_context=request_context,
+    )
+    edit = (
+        {
+            "id": "e",
+            "role": "assistant",
+            "kind": "tool_call",
+            "tool": "Edit",
+            "call_id": "e",
+            "input": {"file_path": "p"},
+        },
+        {"id": "r", "role": "tool", "kind": "tool_result", "call_id": "e", "text": "ok"},
+        {"id": "d", "role": "system", "kind": "state", "data": {"diff": "+++ b/p\n+mask(email)"}},
+    )
+    await s.append(bank, "s1", _req(*edit), request_context=request_context)
+    used, unneeded = [
+        e.seq for e in (await s.events(bank, "s1", request_context=request_context)).items if e.kind == "note"
+    ][:2]
+    reply = (
+        f"> 🧠 **Hindsight thought #{used}** — K is 1024, so I kept it.\n"
+        f"> 🧠 *Hindsight thought #{unneeded}, set aside* — email masking; does not apply: no email here."
+    )
+    await s.append(bank, "s1", _req({"id": "a", "role": "assistant", "text": reply}), request_context=request_context)
+    summary = await s.get(bank, "s1", request_context=request_context)
+    assert (summary.credit_count, summary.dismissed_count) == (1, 1)
+
+
 async def test_an_event_carrying_a_nul_is_stored_without_it(memory, request_context):
     """jsonb rejects U+0000: a tool result with one used to fail the whole append (a 500)."""
     bank = _bank()

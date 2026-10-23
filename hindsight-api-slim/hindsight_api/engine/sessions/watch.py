@@ -109,7 +109,7 @@ FAILED = re.compile(r"\b\d+ failed\b|Traceback \(most recent call last\)|\bFAILE
 # How a delivered note reads when the agent's transcript carries it back.
 # Notes are numbered since the client names the one it credits ("Note #12 from this project's memory"):
 # the plain substring missed every numbered note, leaving only the sent-text match to catch them.
-OWN_NOTE_MARK = re.compile(r"Note (#\d+ )?from this project's memory")
+OWN_NOTE_MARK = re.compile(r"Note (#\d+ )?from this project's memory|Hindsight thought #\d+:")
 
 
 class Pending(BaseModel):

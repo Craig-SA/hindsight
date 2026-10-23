@@ -94,8 +94,14 @@ SAVE_EVERY_EVENTS = 300
 # streams in, so every client that asks for the same lines is counted the same way.
 # One line can name several notes ("live session #10 / #21"): in beta reading only the first left
 # the other counted as not needed.
-CREDIT_RE = re.compile(r"From Hindsight memory \(live session (#\d+[^)]*)\)")
-DISMISS_RE = re.compile(r"Hindsight note \(live session (#\d+[^)]*)\)")
+# The coding-agents plugin now has the agent name notes as thoughts ("Hindsight thought #12" in
+# bold, or "Hindsight thought #12, set aside"); the note lines stay counted for clients that use them.
+CREDIT_RE = re.compile(
+    r"From Hindsight memory \(live session (#\d+[^)]*)\)|Hindsight thought (#\d+(?:\s*(?:/|,|and)\s*#\d+)*)\*\*"
+)
+DISMISS_RE = re.compile(
+    r"Hindsight note \(live session (#\d+[^)]*)\)|Hindsight thought (#\d+(?:\s*(?:/|,|and)\s*#\d+)*), set aside"
+)
 NOTE_NUMBER_RE = re.compile(r"#(\d+)")
 # How the saved conversation reads to extraction when the client does not say: who is speaking.
 DEFAULT_SAVE_CONTEXT = (
@@ -374,10 +380,10 @@ class SessionService:
                         if step is not None:
                             W.read_step(state, step, seq)
                     if event.kind == "message" and payload["role"] == "assistant":
-                        for named in CREDIT_RE.findall(payload["text"]):
-                            cited.update(int(n) for n in NOTE_NUMBER_RE.findall(named))
-                        for named in DISMISS_RE.findall(payload["text"]):
-                            said_unneeded.update(int(n) for n in NOTE_NUMBER_RE.findall(named))
+                        for m in CREDIT_RE.finditer(payload["text"]):
+                            cited.update(int(n) for n in NOTE_NUMBER_RE.findall(m.group(1) or m.group(2)))
+                        for m in DISMISS_RE.finditer(payload["text"]):
+                            said_unneeded.update(int(n) for n in NOTE_NUMBER_RE.findall(m.group(1) or m.group(2)))
                     rows.append((seq, event.id, event.kind, json.dumps(payload)))
                     seq += 1
                 turn_ended = any(r[2] == "turn_end" for r in rows)

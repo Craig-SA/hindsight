@@ -971,7 +971,7 @@ describe("runRetainHook with the live session on a session", () => {
   };
 
   it("leaves saving to the session; a late note is shown to the user, never as an error, and waits for the next prompt", async () => {
-    const rendered = `${NOTE_LEAD.replace("Note", "Note #7")} K is 1024. Source: git show abc. Tell the user about it: …`;
+    const rendered = `${NOTE_LEAD.replace("thought:", "thought #7:")} K is 1024. Source: git show abc. Share it with the user: …`;
     syncAnswer = async () => ({ notes: [rendered], unsupported: false });
     const { retain, makeClient } = stubClient();
     await runRetainHook(spec, makeClient);
@@ -980,7 +980,7 @@ describe("runRetainHook with the live session on a session", () => {
     expect(written.map((w) => JSON.parse(w))).toEqual([
       {
         systemMessage:
-          "🧠 Hindsight has a note for the agent (it reads it with your next message):\n- K is 1024.",
+          "🧠 Hindsight is thinking (the agent picks this up with your next message):\n- K is 1024.",
       },
     ]);
     expect(takePendingContext(notesKey("claude-code"), `sess-live-${basename(root)}`)).toBe(

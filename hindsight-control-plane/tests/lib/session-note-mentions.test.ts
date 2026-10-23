@@ -21,4 +21,15 @@ describe("noteMentions", () => {
     // A note named both ways counts as used; a user quoting the line counts for nothing.
     expect([...out.entries()]).toEqual([[3, "used"]]);
   });
+
+  it("reads the thought lines the coding-agents plugin asks for", () => {
+    const out = noteMentions([
+      msg(1, "assistant", "> 🧠 **Hindsight thought #7** — kept K at 1024."),
+      msg(2, "assistant", "> 🧠 *Hindsight thought #8, set aside* — email rule; does not apply: no email."),
+    ]);
+    expect([...out.entries()].sort()).toEqual([
+      [7, "used"],
+      [8, "unneeded"],
+    ]);
+  });
 });
