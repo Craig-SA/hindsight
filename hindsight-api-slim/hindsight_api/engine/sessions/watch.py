@@ -69,7 +69,8 @@ PRIORITY: dict[str, int] = {"task": 0, "plan": 1, "failure": 2, "command": 3, "e
 # An agent's own suggestion ("the real fix is to sign it with a certificate") came back as the rule
 # against the approach the user chose instead. And a command that only edited button labels got a
 # conflict about app signing, because the request was about a permission loop: the step, not the
-# request, is what a conflict check judges.
+# request, is what a conflict check judges. And "fully support the questions in the chat" got a conflict quoting the
+# old "questions go to the terminal" rule it asked to change: a request replaces a rule without naming it.
 DECISION = (
     "A decision is a rule meant to hold for the project from then on, made by a person or recorded in a "
     "commit or a doc. Not a decision: a choice made for one past task or run, which folder, checkout or "
@@ -77,7 +78,8 @@ DECISION = (
     "Where the "
     "request or the job's own instructions say to do something, that is not a conflict. The request is "
     "the newest decision: where it changes or replaces a recorded one, even in a few words ('switch to "
-    "X'), the recorded one no longer holds."
+    "X'), or asks for the very behaviour a recorded rule ruled out, without naming the rule, the recorded "
+    "one no longer holds."
 )
 
 # A request that changes nothing got "Before you change <x>" anyway in beta (a cost comparison, a

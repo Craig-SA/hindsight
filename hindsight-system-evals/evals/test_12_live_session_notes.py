@@ -17,6 +17,7 @@ past session came back as a rule for the project:
 * a decision the request itself just replaced ("ok let's switch to python then") came back as a rule.
 * the assistant's own suggestion, which the user turned down, came back as a rule.
 * a rule about the code the request is about was raised as a conflict against an edit to other code.
+* a request asked for the very behaviour an earlier rule ruled out, without naming it, and got the rule back.
 
 **A heads-up for a request that changes nothing** (``expect_note=False``): a question or an estimate,
 a scheduled job told to follow its own instruction file, and a request that was only an issue link,
@@ -84,6 +85,30 @@ def _chat(*turns: tuple[str, str]) -> str:
 NO_NOTE_OK = " No note at all also meets the criteria."
 
 CASES = (
+    Case(
+        id="a-request-for-what-a-rule-ruled-out",
+        history=(
+            Memory(
+                _chat(
+                    ("user", "for now, confirmation dialogs open in a separate window, not inline in the page"),
+                    ("assistant", "Done: confirmations open in their own window; the page never shows them inline."),
+                ),
+                at="2026-02-10T09:00:00Z",
+            ),
+        ),
+        request="Can you show the confirmation dialogs inline in the page? I really need them there, test it end to end.",
+        action=Action(
+            "Edit",
+            {"file_path": "web/confirm.ts"},
+            "+++ b/web/confirm.ts\n-openWindow(dialog)\n+page.mount(dialog, { inline: true })",
+        ),
+        criteria=(
+            "No note says showing confirmations inline goes against a rule, or tells the agent to keep them in a "
+            "separate window: the request asks for exactly that change. A note that only mentions the earlier "
+            "choice as background, without calling the change a conflict, is acceptable." + NO_NOTE_OK
+        ),
+        expect_note=False,
+    ),
     Case(
         id="a-rule-about-other-code",
         history=(
