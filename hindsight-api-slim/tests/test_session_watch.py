@@ -316,7 +316,9 @@ def test_the_file_a_request_points_to_becomes_part_of_the_request():
     W.read_step(s, W.Step(kind="result", id="3", text="denied", error=True))
     assert s.request_file.endswith("Links do not count.")
     m = W.Moment(trigger="command", text="git status", recent=[], diff="")
-    assert "THE FILE MY REQUEST POINTS TO" in W.situation(s.goal, m, [], [], s.request_file)
+    assert "THE FILE MY REQUEST POINTS TO (its rules are part of my request and are current" in W.situation(
+        s.goal, m, [], [], s.request_file
+    )
     W.read_step(s, W.Step(kind="ask", text="now something else entirely, fix the footer links"))
     assert s.request_file == ""
 

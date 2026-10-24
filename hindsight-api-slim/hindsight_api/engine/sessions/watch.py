@@ -441,7 +441,12 @@ def situation(goal: str, m: Moment, sent: list[str], set_aside: list[str] | None
         # about one edited file, reworded, on 48 commands in an hour (beta); the repeat guard held them
         # all back, but each cost an answer call.
     if request_file:
-        parts.append("THE FILE MY REQUEST POINTS TO (its rules are part of my request):\n" + request_file)
+        # Current, so it wins: in beta a check holding a job's file ("5 GiB since the last run") still
+        # cited an older memory of the same job ("10 GiB") against the run.
+        parts.append(
+            "THE FILE MY REQUEST POINTS TO (its rules are part of my request and are current: where memory "
+            "says otherwise, the file wins and memory is out of date):\n" + request_file
+        )
     if sent:
         parts.append("ALREADY TOLD ME:\n" + "\n".join(sent))
     if set_aside:

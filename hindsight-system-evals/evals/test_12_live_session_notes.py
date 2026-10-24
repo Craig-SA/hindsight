@@ -20,6 +20,7 @@ past session came back as a rule for the project:
 * a request asked for the very behaviour an earlier rule ruled out, without naming it, and got the rule back.
 * a scheduled job was told its own instruction file's rule, ignoring the exception that same file makes.
 * a rule about one component was applied to a similar component that shares its words.
+* an older memory of a job's rule was cited against the job's own current file.
 
 **A heads-up for a request that changes nothing** (``expect_note=False``): a question or an estimate,
 a scheduled job told to follow its own instruction file, and a request that was only an issue link,
@@ -89,6 +90,30 @@ def _chat(*turns: tuple[str, str]) -> str:
 NO_NOTE_OK = " No note at all also meets the criteria."
 
 CASES = (
+    Case(
+        id="the-jobs-file-is-newer-than-memory",
+        history=(
+            Memory(
+                _chat(
+                    ("user", "for the backup job: investigate the cause only when free space drops 10 GiB or more"),
+                    ("assistant", "Set: the backup job looks for a cause only after a 10 GiB drop."),
+                ),
+                at="2026-02-01T09:00:00Z",
+            ),
+        ),
+        request="You are running the scheduled job 'backup'. Read jobs/backup/JOB.md and do what it says.",
+        action=Action("Bash", {"command": "du -sh ~/backups/* | sort -h | tail -5"}, ""),
+        criteria=(
+            "No note says investigating this 7 GiB drop goes against a 10 GiB rule or tells the agent to skip the "
+            "scan: the job's own file, which is current, sets the trigger at 5 GiB." + NO_NOTE_OK
+        ),
+        expect_note=False,
+        job_file=(
+            "jobs/backup/JOB.md",
+            "# backup\nFind the cause when space drops fast: if free space fell 5 GiB or more since the previous "
+            "run, list the five biggest backup folders. This run: free space fell 7 GiB since the previous run.",
+        ),
+    ),
     Case(
         id="a-rule-for-a-similar-component",
         history=(
