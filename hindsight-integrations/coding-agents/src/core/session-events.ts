@@ -49,7 +49,10 @@ export interface SessionNote {
   source?: { document_id: string; quote?: string; mentioned_at?: string | null } | null;
 }
 
-export type AppendResult = { supported: true; notes: SessionNote[] } | { supported: false };
+/** `checking`: the server is still judging the latest moment, so a note may follow. */
+export type AppendResult =
+  | { supported: true; notes: SessionNote[]; checking?: boolean }
+  | { supported: false };
 
 /** One transcript line, and where it starts in the file (the id when the line has none). */
 export type EventsOf = (line: Record<string, unknown>, offset: number) => SessionMessage[];

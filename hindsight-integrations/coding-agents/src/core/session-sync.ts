@@ -173,6 +173,8 @@ export interface SyncResult {
   notes: string[];
   /** The server has no sessions. */
   unsupported: boolean;
+  /** The server is still checking the latest moment: a note may follow. */
+  checking?: boolean;
 }
 
 /**
@@ -247,6 +249,7 @@ export async function syncSession(args: {
     }
 
     const notes: SessionNote[] = [];
+    let checking = false;
     // At least one append, even with nothing new: it is also how notes written since are fetched.
     // The diff and the turn end go with the last one, after every message they follow.
     for (let i = 0; i === 0 || i < messages.length; i += BATCH) {
@@ -268,6 +271,7 @@ export async function syncSession(args: {
         return { ...none, unsupported: true };
       }
       state.opened = true;
+      checking = r.checking === true;
       for (const n of r.notes)
         if (n.seq > state.ack && !notes.some((x) => x.seq === n.seq)) notes.push(n);
     }
@@ -276,7 +280,7 @@ export async function syncSession(args: {
     notes.sort((a, b) => a.seq - b.seq);
     if (notes.length) state.ack = notes[notes.length - 1].seq;
     writeFileSync(stateFile, JSON.stringify(state));
-    return { notes: notes.map(renderNote), unsupported: false };
+    return { notes: notes.map(renderNote), unsupported: false, checking };
   } finally {
     rmSync(lockFile, { force: true });
   }

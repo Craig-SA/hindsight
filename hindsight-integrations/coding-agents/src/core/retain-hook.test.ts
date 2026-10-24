@@ -988,6 +988,39 @@ describe("runRetainHook with the live session on a session", () => {
     );
   });
 
+  it("in a headless run waits for a running check and hands its note to the agent as a block", async () => {
+    // `claude -p` (a scheduled job): no next prompt will carry the note, and no user sees the block.
+    writeFileSync(
+      file,
+      JSON.stringify({
+        type: "user",
+        entrypoint: "sdk-cli",
+        message: { role: "user", content: "run the job" },
+      })
+    );
+    const rendered = `${NOTE_LEAD.replace("thought:", "thought #9:")} Link the stale page every run.`;
+    const answers = [
+      { notes: [] as string[], unsupported: false, checking: true },
+      { notes: [rendered], unsupported: false, checking: false },
+    ];
+    syncAnswer = async () => answers.shift() ?? { notes: [], unsupported: false };
+    const { makeClient } = stubClient();
+    await runRetainHook(spec, makeClient);
+    expect(written.map((w) => JSON.parse(w))).toEqual([{ decision: "block", reason: rendered }]);
+  });
+
+  it("an interactive run never waits and never blocks", async () => {
+    let calls = 0;
+    syncAnswer = async () => {
+      calls++;
+      return { notes: [], unsupported: false, checking: true };
+    };
+    const { makeClient } = stubClient();
+    await runRetainHook(spec, makeClient);
+    expect(calls).toBe(1);
+    expect(written).toEqual([]);
+  });
+
   it("never writes back itself when the session sync failed: the session saves the turn later", async () => {
     syncAnswer = async () => Promise.reject(new Error("down"));
     const { retain, makeClient } = stubClient();

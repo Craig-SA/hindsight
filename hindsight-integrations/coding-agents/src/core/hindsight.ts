@@ -852,8 +852,8 @@ export class HindsightClient {
       timeoutMs
     );
     if (r.status === 404 || r.status === 405) return { supported: false };
-    const data = (await r.json()) as { notes?: SessionNote[] };
-    return { supported: true, notes: data.notes ?? [] };
+    const data = (await r.json()) as { notes?: SessionNote[]; checking?: boolean };
+    return { supported: true, notes: data.notes ?? [], checking: data.checking === true };
   }
 
   /**

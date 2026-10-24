@@ -13,6 +13,7 @@
  * without stdin; `runRetainHook` is thin plumbing around it, mirroring `runHook`/`buildHookOutput`
  * in core/hook.ts.
  */
+import { readFileSync } from "node:fs";
 import { deriveBankIdOrSkip } from "./bank";
 import { retainLiveSession } from "./chat";
 import { applyBankConfig, loadConfig, isLive } from "./config";
@@ -41,6 +42,22 @@ import { recordUsage, type UsageCursorStore } from "./usage";
 
 /** Headroom left before the host's kill: the response still has to come back after the last wait. */
 const HOST_DEADLINE_MARGIN_MS = 2000;
+/** A headless run waits this long, at most, for a running check's note (see the Stop path). */
+const HEADLESS_NOTE_WAIT_MS = 25_000;
+const HEADLESS_POLL_MS = 2_000;
+/** Kept free of that wait, for the write-back after it. */
+const HEADLESS_RETAIN_RESERVE_MS = 15_000;
+
+/** Whether the transcript is a headless run (`claude -p`): Claude Code stamps each line with how it
+ *  was started, `sdk-cli` for print mode and `cli` for the interactive terminal. */
+export function isHeadlessRun(transcriptPath: string): boolean {
+  try {
+    const head = readFileSync(transcriptPath, "utf8").slice(0, 20_000);
+    return /"entrypoint":"sdk-cli"/.test(head);
+  } catch {
+    return false;
+  }
+}
 import type { TransportTurn } from "./chat";
 
 export interface RetainHookEventFields {
@@ -281,13 +298,42 @@ export async function runRetainHook(
       failed = true;
       diag(spec.harness, "session_sync_failed", { error: describeError(e) });
     }
+    // A headless run (`claude -p`: a scheduled job) has no next prompt to hand a note over to: in
+    // beta the checks of a job's last steps finished after it exited, and their notes, real catches
+    // among them, never reached anyone. There the hook waits for a running check and gives the note
+    // back as `decision: "block"`, so the agent acts on it; no user is there to read a hook error.
+    // Once per stop: a Stop the hook already blocked (`stop_hook_active`) is let through.
+    const headless =
+      live &&
+      (ev as Record<string, unknown>).stop_hook_active !== true &&
+      isHeadlessRun(transcriptPath);
+    if (headless && synced?.checking && !synced.notes.length) {
+      const until = Math.min(
+        Date.now() + HEADLESS_NOTE_WAIT_MS,
+        hostDeadline - HEADLESS_RETAIN_RESERVE_MS
+      );
+      while (synced?.checking && !synced.notes.length && Date.now() < until) {
+        await new Promise((r) => setTimeout(r, HEADLESS_POLL_MS));
+        try {
+          synced = await syncHarnessSession(
+            spec.harness,
+            { session_id: sessionId, transcript_path: transcriptPath, cwd },
+            { cfg, bankId }
+          );
+        } catch {
+          break;
+        }
+      }
+    }
     if (synced || failed) {
       const notes = live
         ? [takePendingContext(notesKey(spec.harness), sessionId), ...(synced?.notes ?? [])]
             .filter(Boolean)
             .join("\n\n")
         : "";
-      if (notes) {
+      if (notes && headless) {
+        process.stdout.write(JSON.stringify({ decision: "block", reason: notes }));
+      } else if (notes) {
         stashPendingContext(notesKey(spec.harness), sessionId, notes); // the next prompt hands it over
         if (spec.stopShowsNotes)
           process.stdout.write(JSON.stringify({ systemMessage: notesForUser(notes) }));
