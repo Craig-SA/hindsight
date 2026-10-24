@@ -535,18 +535,24 @@ def best_sentence(text: str, like: str) -> str:
     have: verbatim by construction, no model call. By overlap alone the line stating the old value
     ("10 # Current setting") beat the rule (7). On a tie the later sentence wins: a chat settles on its
     last word ("leave it at 7" after trying 5)."""
-    want = _words(like)
     best, best_score = "", float("-inf")
     for s in (x.strip() for x in re.split(r"(?<=[.!?])\s+|\n+", text)):
         if len(s) < 20 or len(s) > 300:
             continue
-        shared = foreign = 0
-        for w in _words(s):
-            if w in want:
-                shared += 1
-            elif w[0].isdigit():
-                foreign += 1
-        # The penalty only ranks: "K is 1024, never 1000" still quotes a note that says 1024.
-        if shared > 0 and shared - 2 * foreign >= best_score:
-            best, best_score = s, shared - 2 * foreign
+        score = quote_score(s, like)
+        if score is not None and score >= best_score:
+            best, best_score = s, score
     return best
+
+
+def quote_score(sentence: str, like: str) -> float | None:
+    """How well a source sentence backs the note (see best_sentence), or None when it shares no word."""
+    want = _words(like)
+    shared = foreign = 0
+    for w in _words(sentence):
+        if w in want:
+            shared += 1
+        elif w[0].isdigit():
+            foreign += 1
+    # The penalty only ranks: "K is 1024, never 1000" still quotes a note that says 1024.
+    return shared - 2 * foreign if shared > 0 else None

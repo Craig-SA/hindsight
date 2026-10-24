@@ -754,3 +754,29 @@ async def test_openai_style_messages_become_the_log_and_a_turn_end_is_stored_onc
     await api_client.post(url, json=body)
     await api_client.post(url, json={"turn_end": True})
     assert len([e for e in (await api_client.get(url)).json()["items"] if e["source"] == "client"]) == 7
+
+
+async def test_a_note_is_quoted_from_the_source_that_states_its_rule(memory, request_context, monkeypatch):
+    """The newest source document is not always the one stating the rule: quote the best one."""
+    units = {
+        "obs": {"source_memory_ids": ["new", "old"]},
+        "new": {"document_id": "doc-new", "mentioned_at": "2026-10-23T10:00:00Z"},
+        "old": {"document_id": "doc-old", "mentioned_at": "2026-10-20T10:00:00Z"},
+    }
+    docs = {
+        "doc-new": "The bucket is not created by CI, so each environment needs a manual step.",
+        "doc-old": "Each query creates a fresh query session, with one query handled at a time.",
+    }
+
+    async def get_memory_unit(bank_id, memory_id, request_context):
+        return units.get(memory_id)
+
+    async def get_document(document_id, bank_id, request_context):
+        return {"original_text": docs[document_id]}
+
+    monkeypatch.setattr(memory, "get_memory_unit", get_memory_unit)
+    monkeypatch.setattr(memory, "get_document", get_document)
+    src = await memory.sessions._source_of(
+        _bank(), ["obs"], "Revert the shared session: each query creates a fresh query session.", request_context
+    )
+    assert src is not None and src.document_id == "doc-old" and src.quote.startswith("Each query creates")

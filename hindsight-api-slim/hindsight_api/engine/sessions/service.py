@@ -982,8 +982,11 @@ class SessionService:
     async def _source_of(
         self, bank_id: str, memory_ids: list[str], note: str, rc: RequestContext
     ) -> SessionNoteSource | None:
-        """Where the note comes from: the newest document behind the first memory it used, and that
-        document's closest sentence to the note (verbatim), so the reader can check it."""
+        """Where the note comes from: the document behind the first memory it used whose sentence backs
+        the note best (verbatim), so the reader can check it; the newest on a tie. Was: the newest
+        document's best sentence, even when that document did not state the rule. In beta a note on
+        "a fresh query session per query" came quoted with "the bucket is not created by CI", and the
+        agent set aside a note its memory did support."""
         if not memory_ids:
             return None
         try:
@@ -996,17 +999,21 @@ class SessionService:
             if memory and memory.get("document_id"):
                 sources.append(memory)
             sources.sort(key=lambda u: str(u.get("mentioned_at") or ""), reverse=True)
+            best: SessionNoteSource | None = None
+            best_score = float("-inf")
             for unit in sources:
                 doc = await self._engine.get_document(unit["document_id"], bank_id, request_context=rc)
                 if not doc:
                     continue
                 quote = W.best_sentence(W.readable(doc.get("original_text") or ""), note)
-                if quote:
-                    return SessionNoteSource(
-                        document_id=unit["document_id"],
-                        quote=quote,
-                        mentioned_at=unit.get("mentioned_at"),
+                score = W.quote_score(quote, note) if quote else None
+                if score is not None and score > best_score:
+                    best_score = score
+                    best = SessionNoteSource(
+                        document_id=unit["document_id"], quote=quote, mentioned_at=unit.get("mentioned_at")
                     )
+            if best:
+                return best
             if sources:
                 return SessionNoteSource(
                     document_id=sources[0]["document_id"], mentioned_at=sources[0].get("mentioned_at")
