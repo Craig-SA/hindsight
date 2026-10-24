@@ -50,7 +50,11 @@ SET_ASIDE_KEPT = 20
 # Scheduled jobs: 8 of 37 bad notes in beta told a job what its own instruction file already said, or
 # what that file makes an exception to, because the check saw only "Read JOB.md and do what it says".
 REQUEST_FILE = re.compile(r"[\w./~-]+\.(?:md|txt|ya?ml|json|toml)\b")
-REQUEST_FILE_CAP = 4000
+REQUEST_FILE_CAP = 8000
+# A tool result as the watcher reads it: the client sends up to 8000 chars. At 3000 a job's 8.5 KB
+# JOB.md came through cut at line 21, its linking rule (line 59) missing, and a note then contradicted
+# that rule; a failure's tail, where the error is, was cut off the same way. Never stored in the state.
+RESULT_CAP = 8000
 # A session's commands and plans are checked at most this often; the latest one waits for the next
 # turn (heaviest, then latest, wins the pending slot). In beta command checks were ~85% of all checks,
 # 6 of 35 command notes changed the work and 25 were irrelevant or wrong, and on a laptop their
@@ -231,7 +235,10 @@ def step_of(kind: str, role: str, event: dict[str, Any]) -> Step | None:
         )
     if kind == "tool_result":
         return Step(
-            kind="result", id=str(event.get("call_id") or ""), text=_clip(text, 3000), error=bool(event.get("is_error"))
+            kind="result",
+            id=str(event.get("call_id") or ""),
+            text=_clip(text, RESULT_CAP),
+            error=bool(event.get("is_error")),
         )
     if kind == "state":
         data = event.get("data") or {}
