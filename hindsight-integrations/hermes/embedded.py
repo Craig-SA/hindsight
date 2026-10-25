@@ -356,6 +356,8 @@ _PLUGIN_PROFILE_ENV_KEYS = frozenset(
         "HINDSIGHT_API_LOG_LEVEL",
         "HINDSIGHT_API_LLM_BASE_URL",
         "HINDSIGHT_EMBED_DAEMON_IDLE_TIMEOUT",
+        "HINDSIGHT_API_DATABASE_URL",
+        "HINDSIGHT_PG0_INSTANCE",
     }
 )
 
@@ -395,6 +397,26 @@ def _build_embedded_profile_env(config: dict[str, Any], *, llm_api_key: str | No
         idle_timeout = os.environ.get("HINDSIGHT_IDLE_TIMEOUT")
     if idle_timeout is not None and idle_timeout != "":
         env_values["HINDSIGHT_EMBED_DAEMON_IDLE_TIMEOUT"] = str(_parse_int_setting(idle_timeout, _DEFAULT_IDLE_TIMEOUT))
+    # Where the database IS. Without it the server this plugin launches cannot know a cluster
+    # exists, so it falls back to pg0-owned mode and tries to START Postgres. That fails whenever
+    # the cluster outlives the daemon — which is normal, since Postgres survives reboots and the
+    # API restarts often: pg0's is_running() reads the pid recorded in its instance.json (stale
+    # after any restart), answers "not running", and start() then reads the live postmaster.pid
+    # and refuses with "Instance already running (pid: N)". Five attempts, then
+    # "Application startup failed" and memory stays down. Passing the pins makes the server
+    # CONNECT instead of owning. Config first, then the scoped secret, then the parent
+    # environment — a miss is a miss, never a guess, so a default pg0 deployment is unchanged.
+    for pin in ("HINDSIGHT_API_DATABASE_URL", "HINDSIGHT_PG0_INSTANCE"):
+        pin_value = config.get(pin)
+        if not pin_value:
+            try:
+                pin_value = get_secret(pin, "")
+            except UnscopedSecretError:
+                pin_value = ""
+        if not pin_value:
+            pin_value = os.environ.get(pin, "")
+        if pin_value:
+            env_values[pin] = str(pin_value)
     return env_values
 
 

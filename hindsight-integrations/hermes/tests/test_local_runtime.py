@@ -336,3 +336,37 @@ def test_a_rewrite_keeps_the_keys_the_plugin_does_not_own(hermes_env):
         "HINDSIGHT_API_TENANT_API_KEY": "t",
     }
     assert embedded._profile_env_drifted(_CFG) is False
+
+
+def test_a_pinned_database_beats_pg0_ownership(monkeypatch):
+    """A pinned cluster outlives the daemon, so the launched server must be TOLD where the
+    database is. Without the pin it falls into pg0-owned mode and tries to start a Postgres
+    that is already running, which fails with "Instance already running (pid: N)"."""
+    monkeypatch.setenv("HINDSIGHT_API_DATABASE_URL", "postgresql://u:p@127.0.0.1:5433/hindsight")
+    monkeypatch.setenv("HINDSIGHT_PG0_INSTANCE", "hindsight-embed-hermes")
+
+    env = embedded._build_embedded_profile_env({"llm_provider": "deepseek", "llm_model": "m"})
+
+    assert env["HINDSIGHT_API_DATABASE_URL"] == "postgresql://u:p@127.0.0.1:5433/hindsight"
+    assert env["HINDSIGHT_PG0_INSTANCE"] == "hindsight-embed-hermes"
+
+
+def test_the_database_pins_are_plugin_owned_keys(monkeypatch):
+    """Drift is judged on _PLUGIN_PROFILE_ENV_KEYS alone: a key the build can write but this
+    set omits reads as permanent drift and rewrites the profile env on every new process."""
+    monkeypatch.setenv("HINDSIGHT_API_DATABASE_URL", "postgresql://u:p@127.0.0.1:5433/hindsight")
+
+    assert "HINDSIGHT_API_DATABASE_URL" in embedded._PLUGIN_PROFILE_ENV_KEYS
+    assert "HINDSIGHT_PG0_INSTANCE" in embedded._PLUGIN_PROFILE_ENV_KEYS
+
+
+def test_a_default_pg0_deployment_writes_no_database_pins(monkeypatch):
+    """No config, no secret and no environment value must leave the profile env exactly as it
+    was before the pins existed, so the default embedded-pg0 deployment is untouched."""
+    monkeypatch.delenv("HINDSIGHT_API_DATABASE_URL", raising=False)
+    monkeypatch.delenv("HINDSIGHT_PG0_INSTANCE", raising=False)
+
+    env = embedded._build_embedded_profile_env({"llm_provider": "deepseek", "llm_model": "m"})
+
+    assert "HINDSIGHT_API_DATABASE_URL" not in env
+    assert "HINDSIGHT_PG0_INSTANCE" not in env
