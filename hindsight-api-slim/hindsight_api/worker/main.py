@@ -37,6 +37,22 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 logger = logging.getLogger(__name__)
 
 
+# Upper bound on the engine's close() at shutdown. Its own steps are each prompt
+# (the maintenance loop cancels its job in progress after a few seconds); this
+# keeps any step that is not from turning one restart into a full grace period.
+_ENGINE_CLOSE_TIMEOUT_SECONDS = 60.0
+
+
+async def _close_within(memory: Any, timeout: float) -> bool:
+    """Close the engine, giving up after ``timeout`` seconds. True if it closed in time."""
+    try:
+        await asyncio.wait_for(memory.close(), timeout=timeout)
+        return True
+    except asyncio.TimeoutError:
+        logger.warning(f"Engine close did not finish within {timeout:.0f}s; exiting without it")
+        return False
+
+
 def _install_shutdown_signal_handlers(
     loop: asyncio.AbstractEventLoop,
     handler: Callable[[], None],
@@ -431,8 +447,10 @@ def main():
             except asyncio.CancelledError:
                 pass
 
-        # Close memory engine
-        await memory.close()
+        # Close memory engine, within a bound: the platform kills the process at the end
+        # of its termination grace period anyway, and a close that cannot finish must
+        # not hold a rolling restart for that long.
+        await _close_within(memory, _ENGINE_CLOSE_TIMEOUT_SECONDS)
 
         # Flush queued spans before exiting: a consolidation span can be minutes
         # long, and everything still batched is lost if the process just exits.
