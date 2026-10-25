@@ -123,6 +123,72 @@ class TestStartJitter:
         assert await loop._wait_start_jitter() is False
 
 
+class TestStop:
+    """stop() is on every shutdown path, so it must return promptly whatever the loop is doing."""
+
+    @pytest.mark.asyncio
+    async def test_a_job_that_does_not_reach_a_stopping_point_is_cancelled(self, monkeypatch):
+        import asyncio
+
+        import hindsight_api.engine.maintenance as maintenance_mod
+
+        monkeypatch.setattr(maintenance_mod, "_STOP_GRACE_SECONDS", 0.1)
+        loop = MaintenanceLoop(engine=None)
+        started, cancelled = asyncio.Event(), asyncio.Event()
+
+        async def _long_job():
+            started.set()
+            try:
+                await asyncio.sleep(3600)
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+
+        loop._task = asyncio.create_task(_long_job())
+        await started.wait()
+        # Bounded here only so that a stop which waits on the job fails instead of hanging.
+        await asyncio.wait_for(loop.stop(), timeout=2)
+
+        assert cancelled.is_set()
+        assert loop._task is None
+
+    @pytest.mark.asyncio
+    async def test_a_job_that_reaches_a_stopping_point_finishes_on_its_own(self):
+        import asyncio
+
+        loop = MaintenanceLoop(engine=None)
+        finished = asyncio.Event()
+
+        async def _cooperative_job():
+            while not loop._stop.is_set():
+                await asyncio.sleep(0.01)
+            finished.set()
+
+        loop._task = asyncio.create_task(_cooperative_job())
+        await asyncio.sleep(0)
+        await asyncio.wait_for(loop.stop(), timeout=2)
+
+        assert finished.is_set()
+
+    @pytest.mark.asyncio
+    async def test_a_job_failing_while_stopping_does_not_raise(self):
+        import asyncio
+
+        loop = MaintenanceLoop(engine=None)
+
+        async def _failing_job():
+            await loop._stop.wait()
+            raise RuntimeError("boom")
+
+        loop._task = asyncio.create_task(_failing_job())
+        await asyncio.sleep(0)
+        await asyncio.wait_for(loop.stop(), timeout=2)
+
+    @pytest.mark.asyncio
+    async def test_stop_without_a_task_is_a_noop(self):
+        await MaintenanceLoop(engine=None).stop()
+
+
 async def _make_bank(memory: MemoryEngine, request_context, suffix: str, config_json: str | None = None) -> str:
     bank_id = f"recon-{suffix}-{uuid.uuid4().hex[:8]}"
     await memory.ensure_bank_profile(bank_id=bank_id, request_context=request_context)
